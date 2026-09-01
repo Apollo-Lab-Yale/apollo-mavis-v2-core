@@ -1,0 +1,40 @@
+{
+  "description": "Server -> client, one per ActionMsg.",
+  "properties": {
+    "detail": {
+      "default": "",
+      "title": "Detail",
+      "type": "string"
+    },
+    "name": {
+      "enum": [
+        "switch_arm",
+        "takeover_toggle",
+        "episode_new",
+        "episode_save",
+        "episode_discard",
+        "save_profile",
+        "set_initial_condition",
+        "joint_target"
+      ],
+      "title": "Name",
+      "type": "string"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "t": {
+      "const": "ack",
+      "default": "ack",
+      "title": "T",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "ok"
+  ],
+  "title": "AckMsg",
+  "type": "object"
+}

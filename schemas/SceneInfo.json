@@ -1,0 +1,49 @@
+{
+  "description": "GET /api/scenes?kind=sim|twin row.",
+  "properties": {
+    "cameras": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Cameras",
+      "type": "array"
+    },
+    "kind": {
+      "enum": [
+        "sim",
+        "twin"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "num_arms": {
+      "title": "Num Arms",
+      "type": "integer"
+    },
+    "rail_flags": {
+      "items": {
+        "type": "boolean"
+      },
+      "title": "Rail Flags",
+      "type": "array"
+    },
+    "scene_id": {
+      "title": "Scene Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "scene_id",
+    "label",
+    "num_arms",
+    "rail_flags",
+    "cameras",
+    "kind"
+  ],
+  "title": "SceneInfo",
+  "type": "object"
+}

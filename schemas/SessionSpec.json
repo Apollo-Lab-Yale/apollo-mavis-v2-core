@@ -1,0 +1,98 @@
+{
+  "description": "POST /api/session body.",
+  "properties": {
+    "arms": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Arms",
+      "type": "array"
+    },
+    "digital_twin_scene": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Digital Twin Scene"
+    },
+    "frames": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Frames",
+      "type": "object"
+    },
+    "kind": {
+      "enum": [
+        "hardware",
+        "sim"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "teleop",
+        "collect",
+        "dagger",
+        "inference"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "policy": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Policy"
+    },
+    "sim_scene": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sim Scene"
+    },
+    "start_from": {
+      "default": "keep_current",
+      "title": "Start From",
+      "type": "string"
+    },
+    "task": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Task"
+    }
+  },
+  "required": [
+    "mode",
+    "kind",
+    "arms",
+    "frames"
+  ],
+  "title": "SessionSpec",
+  "type": "object"
+}

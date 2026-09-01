@@ -1,0 +1,49 @@
+# Valid 3-arm hardware workcell with 4 cameras (01-core §7 / §18).
+kind: hardware
+digital_twin_scene: twin_triple
+arms:
+  - id: arm0
+    ip: "192.168.1.201"
+    base_in_world:
+      position: [0.0, -0.6, 0.0]
+    expect_rail: "yes"
+  - id: arm1
+    ip: "192.168.1.202"
+    base_in_world:
+      position: [0.0, 0.0, 0.0]
+  - id: arm2
+    ip: "192.168.1.203"
+    base_in_world:
+      position: [0.0, 0.6, 0.0]
+    gripper: none
+cameras:
+  - id: wrist0
+    kind: v4l2
+    device_path: /dev/v4l/by-id/usb-cam0-video-index0
+    extrinsics_frame: "ee:arm0"
+  - id: wrist1
+    kind: v4l2
+    device_path: /dev/v4l/by-id/usb-cam1-video-index0
+    extrinsics_frame: "ee:arm1"
+  - id: wrist2
+    kind: realsense
+    serial: "827312071234"
+    extrinsics_frame: "arm_base:arm2"
+    intrinsics:
+      fx: 615.0
+      fy: 615.0
+      cx: 320.0
+      cy: 240.0
+      distortion: [0.1, -0.02, 0.0, 0.0, 0.0]
+  - id: env
+    kind: realsense
+    serial: "827312075678"
+    resolution: [1280, 720]
+    fps: 15
+    extrinsics_frame: world
+    extrinsics_file: calib/env.yaml
+safety:
+  enabled: true
+  geom_inflation_m: 0.01
+  allowed_pairs_extra:
+    - ["arm0/link7", "arm1/link7"]

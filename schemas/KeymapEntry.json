@@ -1,0 +1,51 @@
+{
+  "description": "One keyboard binding row.",
+  "properties": {
+    "action": {
+      "title": "Action",
+      "type": "string"
+    },
+    "code": {
+      "title": "Code",
+      "type": "string"
+    },
+    "group": {
+      "enum": [
+        "translate",
+        "rotate",
+        "gripper",
+        "rail",
+        "session",
+        "episode"
+      ],
+      "title": "Group",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "held",
+        "discrete"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "requires_rail": {
+      "default": false,
+      "title": "Requires Rail",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "code",
+    "action",
+    "kind",
+    "label",
+    "group"
+  ],
+  "title": "KeymapEntry",
+  "type": "object"
+}

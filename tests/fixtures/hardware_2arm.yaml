@@ -1,0 +1,21 @@
+# Valid 2-arm hardware workcell; arm0 rides the rail (01-core §7 / §18).
+kind: hardware
+digital_twin_scene: twin_dual
+arms:
+  - id: arm0
+    ip: "192.168.1.201"
+    base_in_world:
+      position: [0.0, -0.4, 0.0]
+    expect_rail: "yes"
+    gripper: xarm
+  - id: arm1
+    ip: "192.168.1.202"
+    base_in_world:
+      position: [0.0, 0.4, 0.0]
+      orientation_wxyz: [0.0, 0.0, 0.0, 1.0]
+    expect_rail: "no"
+    gripper: xarm_g2
+    tcp_load_kg: 0.95
+safety:
+  enabled: true
+  warn_clearance_m: 0.03

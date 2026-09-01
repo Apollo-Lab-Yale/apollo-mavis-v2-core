@@ -1,0 +1,715 @@
+{
+  "$defs": {
+    "ArmTelemetry": {
+      "description": "Per-arm telemetry block.",
+      "properties": {
+        "arm_id": {
+          "title": "Arm Id",
+          "type": "string"
+        },
+        "connected": {
+          "title": "Connected",
+          "type": "boolean"
+        },
+        "ee_pose": {
+          "$ref": "#/$defs/PoseMsg"
+        },
+        "error_code": {
+          "title": "Error Code",
+          "type": "integer"
+        },
+        "goto": {
+          "anyOf": [
+            {
+              "enum": [
+                "planning",
+                "executing",
+                "failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Goto"
+        },
+        "gripper_open_frac": {
+          "title": "Gripper Open Frac",
+          "type": "number"
+        },
+        "q": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Q",
+          "type": "array"
+        },
+        "rail_pos_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rail Pos M"
+        },
+        "stale": {
+          "default": false,
+          "title": "Stale",
+          "type": "boolean"
+        },
+        "warn_code": {
+          "default": 0,
+          "title": "Warn Code",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "arm_id",
+        "connected",
+        "q",
+        "rail_pos_m",
+        "ee_pose",
+        "gripper_open_frac",
+        "error_code"
+      ],
+      "title": "ArmTelemetry",
+      "type": "object"
+    },
+    "ClearanceItem": {
+      "description": "One monitored geometry pair at the measured config.",
+      "properties": {
+        "dist_m": {
+          "title": "Dist M",
+          "type": "number"
+        },
+        "pair": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Pair",
+          "type": "array"
+        }
+      },
+      "required": [
+        "pair",
+        "dist_m"
+      ],
+      "title": "ClearanceItem",
+      "type": "object"
+    },
+    "CollisionEvent": {
+      "description": "Rich per-transition collision-gate event (additive detail).",
+      "properties": {
+        "arm_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Arm Ids",
+          "type": "array"
+        },
+        "dists_m": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Dists M",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "blocked",
+            "cleared",
+            "warn",
+            "penetration",
+            "stale_twin"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "min_clearance_m": {
+          "title": "Min Clearance M",
+          "type": "number"
+        },
+        "pairs": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Pairs",
+          "type": "array"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommandSource"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "t": {
+          "const": "collision_event",
+          "default": "collision_event",
+          "title": "T",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "number"
+        }
+      },
+      "required": [
+        "ts",
+        "kind",
+        "pairs",
+        "dists_m",
+        "min_clearance_m"
+      ],
+      "title": "CollisionEvent",
+      "type": "object"
+    },
+    "CollisionReport": {
+      "description": "Gate verdict for one check; the UI shape (05-ui \u00a72).",
+      "properties": {
+        "blocked": {
+          "title": "Blocked",
+          "type": "boolean"
+        },
+        "min_clearance_m": {
+          "default": 1.0,
+          "title": "Min Clearance M",
+          "type": "number"
+        },
+        "pairs": {
+          "default": [],
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Pairs",
+          "type": "array"
+        },
+        "severity": {
+          "enum": [
+            "ok",
+            "warn",
+            "blocked"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "ts": {
+          "default": 0.0,
+          "title": "Ts",
+          "type": "number"
+        },
+        "violations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CollisionEvent"
+          },
+          "title": "Violations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "blocked",
+        "severity"
+      ],
+      "title": "CollisionReport",
+      "type": "object"
+    },
+    "CommandSource": {
+      "description": "Origin of the command stream a safety event refers to.",
+      "enum": [
+        "teleop",
+        "joint_jog",
+        "policy",
+        "takeover",
+        "planner"
+      ],
+      "title": "CommandSource",
+      "type": "string"
+    },
+    "ControlMode": {
+      "enum": [
+        "policy",
+        "human",
+        "takeover_transition"
+      ],
+      "title": "ControlMode",
+      "type": "string"
+    },
+    "DaggerStatus": {
+      "description": "DAgger session block; full shape per 12-dagger \u00a711 (canonical).",
+      "properties": {
+        "control_mode": {
+          "$ref": "#/$defs/ControlMode"
+        },
+        "engaged_arm": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Engaged Arm"
+        },
+        "episodes_labeled": {
+          "default": 0,
+          "title": "Episodes Labeled",
+          "type": "integer"
+        },
+        "frozen_arms": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Frozen Arms",
+          "type": "array"
+        },
+        "new_label_frames": {
+          "default": 0,
+          "title": "New Label Frames",
+          "type": "integer"
+        },
+        "policy_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Policy Version"
+        },
+        "staged_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staged Version"
+        },
+        "takeover_rate_ep": {
+          "default": 0.0,
+          "title": "Takeover Rate Ep",
+          "type": "number"
+        },
+        "takeover_rate_run": {
+          "default": 0.0,
+          "title": "Takeover Rate Run",
+          "type": "number"
+        },
+        "trainer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrainerStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "control_mode",
+        "engaged_arm",
+        "policy_version"
+      ],
+      "title": "DaggerStatus",
+      "type": "object"
+    },
+    "EpisodeStatus": {
+      "description": "Episode recorder status (collect/DAgger).",
+      "properties": {
+        "duration_s": {
+          "title": "Duration S",
+          "type": "number"
+        },
+        "frames": {
+          "title": "Frames",
+          "type": "integer"
+        },
+        "index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Index"
+        },
+        "state": {
+          "enum": [
+            "idle",
+            "recording",
+            "saving"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "index",
+        "frames",
+        "duration_s"
+      ],
+      "title": "EpisodeStatus",
+      "type": "object"
+    },
+    "InferenceStatus": {
+      "description": "Inference block; same gate machinery, takeover = SAFETY ESCAPE.",
+      "properties": {
+        "control_mode": {
+          "$ref": "#/$defs/ControlMode"
+        },
+        "engaged_arm": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engaged Arm"
+        },
+        "policy_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Policy Version"
+        }
+      },
+      "required": [
+        "control_mode",
+        "policy_version"
+      ],
+      "title": "InferenceStatus",
+      "type": "object"
+    },
+    "PoseMsg": {
+      "description": "Wire pose: position in m, orientation as wxyz unit quaternion.",
+      "properties": {
+        "orientation": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Orientation",
+          "type": "array"
+        },
+        "position": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Position",
+          "type": "array"
+        }
+      },
+      "required": [
+        "position",
+        "orientation"
+      ],
+      "title": "PoseMsg",
+      "type": "object"
+    },
+    "SessionTelemetry": {
+      "description": "Additive session-lifecycle block (04-runtime \u00a713.3).",
+      "properties": {
+        "plan_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Plan Status"
+        },
+        "start_from_progress": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start From Progress"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "trainer_alive": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trainer Alive"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "SessionTelemetry",
+      "type": "object"
+    },
+    "TrainerStatus": {
+      "description": "Trainer health; pydantic \u2014 rides telemetry (\u00a711).",
+      "properties": {
+        "last_burst_loss": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Burst Loss"
+        },
+        "last_checkpoint_ts": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Checkpoint Ts"
+        },
+        "last_checkpoint_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Checkpoint Version"
+        },
+        "new_label_frames": {
+          "default": 0,
+          "title": "New Label Frames",
+          "type": "integer"
+        },
+        "state": {
+          "enum": [
+            "starting",
+            "idle",
+            "training",
+            "dead"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "steps_total": {
+          "default": 0,
+          "title": "Steps Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "TrainerStatus",
+      "type": "object"
+    }
+  },
+  "description": "One 25 Hz telemetry frame.",
+  "properties": {
+    "active_arm": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Active Arm"
+    },
+    "arms": {
+      "items": {
+        "$ref": "#/$defs/ArmTelemetry"
+      },
+      "title": "Arms",
+      "type": "array"
+    },
+    "clearances": {
+      "items": {
+        "$ref": "#/$defs/ClearanceItem"
+      },
+      "title": "Clearances",
+      "type": "array"
+    },
+    "collision": {
+      "$ref": "#/$defs/CollisionReport"
+    },
+    "controller_connected": {
+      "title": "Controller Connected",
+      "type": "boolean"
+    },
+    "dagger": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DaggerStatus"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "episode": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EpisodeStatus"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "epoch": {
+      "title": "Epoch",
+      "type": "string"
+    },
+    "inference": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InferenceStatus"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "seq": {
+      "title": "Seq",
+      "type": "integer"
+    },
+    "session": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SessionTelemetry"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "t": {
+      "const": "telemetry",
+      "default": "telemetry",
+      "title": "T",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "number"
+    }
+  },
+  "required": [
+    "seq",
+    "ts",
+    "epoch",
+    "active_arm",
+    "controller_connected",
+    "arms",
+    "collision",
+    "clearances",
+    "episode",
+    "dagger",
+    "inference"
+  ],
+  "title": "TelemetryMsg",
+  "type": "object"
+}

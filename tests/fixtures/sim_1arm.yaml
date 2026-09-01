@@ -1,0 +1,14 @@
+# Valid 1-arm sim workcell (01-core §7 / §18).
+kind: sim
+sim_scene: table_single
+arms:
+  - id: arm0
+    base_in_world:
+      position: [0.0, 0.0, 0.0]
+      orientation_wxyz: [1.0, 0.0, 0.0, 0.0]
+    gripper: xarm
+cameras:
+  - id: sim_front
+    kind: sim
+    resolution: [640, 480]
+    fps: 30

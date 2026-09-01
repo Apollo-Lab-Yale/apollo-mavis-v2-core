@@ -1,0 +1,19 @@
+{
+  "description": "Args for ``name == \"set_initial_condition\"``.",
+  "properties": {
+    "profile_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Profile Id"
+    }
+  },
+  "title": "SetInitialConditionArgs",
+  "type": "object"
+}

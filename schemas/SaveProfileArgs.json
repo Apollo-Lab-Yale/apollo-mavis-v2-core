@@ -1,0 +1,19 @@
+{
+  "description": "Args for ``name == \"save_profile\"``.",
+  "properties": {
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "notes": {
+      "default": "",
+      "title": "Notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "SaveProfileArgs",
+  "type": "object"
+}

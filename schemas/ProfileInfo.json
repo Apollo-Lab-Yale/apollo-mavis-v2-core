@@ -1,0 +1,42 @@
+{
+  "description": "GET /api/profiles row (full posture via GET /api/profiles/{id}).",
+  "properties": {
+    "arms": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Arms",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "is_initial_condition": {
+      "title": "Is Initial Condition",
+      "type": "boolean"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "notes": {
+      "title": "Notes",
+      "type": "string"
+    },
+    "profile_id": {
+      "title": "Profile Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "profile_id",
+    "name",
+    "arms",
+    "notes",
+    "created_at",
+    "is_initial_condition"
+  ],
+  "title": "ProfileInfo",
+  "type": "object"
+}

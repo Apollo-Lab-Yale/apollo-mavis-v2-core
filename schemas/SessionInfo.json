@@ -1,0 +1,51 @@
+{
+  "description": "POST/GET /api/session response.",
+  "properties": {
+    "arms": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Arms",
+      "type": "array"
+    },
+    "epoch": {
+      "title": "Epoch",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "teleop",
+        "collect",
+        "dagger",
+        "inference"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "streams": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Streams",
+      "type": "array"
+    }
+  },
+  "required": [
+    "session_id",
+    "epoch",
+    "mode",
+    "arms",
+    "streams",
+    "state"
+  ],
+  "title": "SessionInfo",
+  "type": "object"
+}

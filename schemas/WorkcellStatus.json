@@ -1,0 +1,181 @@
+{
+  "$defs": {
+    "ArmStatusInfo": {
+      "description": "Landing-page arm card.",
+      "properties": {
+        "arm_id": {
+          "title": "Arm Id",
+          "type": "string"
+        },
+        "connected": {
+          "title": "Connected",
+          "type": "boolean"
+        },
+        "error_code": {
+          "title": "Error Code",
+          "type": "integer"
+        },
+        "gripper": {
+          "enum": [
+            "xarm",
+            "xarm_g2",
+            "none"
+          ],
+          "title": "Gripper",
+          "type": "string"
+        },
+        "gripper_force_capable": {
+          "title": "Gripper Force Capable",
+          "type": "boolean"
+        },
+        "has_rail": {
+          "title": "Has Rail",
+          "type": "boolean"
+        },
+        "ip": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ip"
+        },
+        "joint_limits": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Joint Limits",
+          "type": "array"
+        }
+      },
+      "required": [
+        "arm_id",
+        "ip",
+        "connected",
+        "has_rail",
+        "gripper",
+        "gripper_force_capable",
+        "error_code",
+        "joint_limits"
+      ],
+      "title": "ArmStatusInfo",
+      "type": "object"
+    },
+    "CameraInfo": {
+      "description": "Landing-page camera card.",
+      "properties": {
+        "camera_id": {
+          "title": "Camera Id",
+          "type": "string"
+        },
+        "fps": {
+          "title": "Fps",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "v4l2",
+            "realsense",
+            "sim"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "live": {
+          "title": "Live",
+          "type": "boolean"
+        },
+        "resolution": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Resolution",
+          "type": "array"
+        }
+      },
+      "required": [
+        "camera_id",
+        "kind",
+        "label",
+        "resolution",
+        "fps",
+        "live"
+      ],
+      "title": "CameraInfo",
+      "type": "object"
+    }
+  },
+  "description": "GET /api/workcell response.",
+  "properties": {
+    "arms": {
+      "items": {
+        "$ref": "#/$defs/ArmStatusInfo"
+      },
+      "title": "Arms",
+      "type": "array"
+    },
+    "available_kinds": {
+      "items": {
+        "enum": [
+          "hardware",
+          "sim"
+        ],
+        "type": "string"
+      },
+      "title": "Available Kinds",
+      "type": "array"
+    },
+    "cameras": {
+      "items": {
+        "$ref": "#/$defs/CameraInfo"
+      },
+      "title": "Cameras",
+      "type": "array"
+    },
+    "kind": {
+      "enum": [
+        "hardware",
+        "sim"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "policies_available": {
+      "default": false,
+      "title": "Policies Available",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "kind",
+    "available_kinds",
+    "arms",
+    "cameras"
+  ],
+  "title": "WorkcellStatus",
+  "type": "object"
+}

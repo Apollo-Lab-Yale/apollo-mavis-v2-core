@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "CommandSource": {
+      "description": "Origin of the command stream a safety event refers to.",
+      "enum": [
+        "teleop",
+        "joint_jog",
+        "policy",
+        "takeover",
+        "planner"
+      ],
+      "title": "CommandSource",
+      "type": "string"
+    }
+  },
+  "description": "Rich per-transition collision-gate event (additive detail).",
+  "properties": {
+    "arm_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Arm Ids",
+      "type": "array"
+    },
+    "dists_m": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Dists M",
+      "type": "array"
+    },
+    "kind": {
+      "enum": [
+        "blocked",
+        "cleared",
+        "warn",
+        "penetration",
+        "stale_twin"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "min_clearance_m": {
+      "title": "Min Clearance M",
+      "type": "number"
+    },
+    "pairs": {
+      "items": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "type": "array"
+      },
+      "title": "Pairs",
+      "type": "array"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CommandSource"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "t": {
+      "const": "collision_event",
+      "default": "collision_event",
+      "title": "T",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "number"
+    }
+  },
+  "required": [
+    "ts",
+    "kind",
+    "pairs",
+    "dists_m",
+    "min_clearance_m"
+  ],
+  "title": "CollisionEvent",
+  "type": "object"
+}

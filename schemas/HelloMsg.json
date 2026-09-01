@@ -1,0 +1,41 @@
+{
+  "description": "Server -> client, immediately after WS accept.",
+  "properties": {
+    "epoch": {
+      "title": "Epoch",
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "controller",
+        "observer"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Session Id"
+    },
+    "t": {
+      "const": "hello",
+      "default": "hello",
+      "title": "T",
+      "type": "string"
+    }
+  },
+  "required": [
+    "epoch",
+    "session_id",
+    "role"
+  ],
+  "title": "HelloMsg",
+  "type": "object"
+}

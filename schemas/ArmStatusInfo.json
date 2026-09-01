@@ -1,0 +1,74 @@
+{
+  "description": "Landing-page arm card.",
+  "properties": {
+    "arm_id": {
+      "title": "Arm Id",
+      "type": "string"
+    },
+    "connected": {
+      "title": "Connected",
+      "type": "boolean"
+    },
+    "error_code": {
+      "title": "Error Code",
+      "type": "integer"
+    },
+    "gripper": {
+      "enum": [
+        "xarm",
+        "xarm_g2",
+        "none"
+      ],
+      "title": "Gripper",
+      "type": "string"
+    },
+    "gripper_force_capable": {
+      "title": "Gripper Force Capable",
+      "type": "boolean"
+    },
+    "has_rail": {
+      "title": "Has Rail",
+      "type": "boolean"
+    },
+    "ip": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Ip"
+    },
+    "joint_limits": {
+      "items": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "type": "array"
+      },
+      "title": "Joint Limits",
+      "type": "array"
+    }
+  },
+  "required": [
+    "arm_id",
+    "ip",
+    "connected",
+    "has_rail",
+    "gripper",
+    "gripper_force_capable",
+    "error_code",
+    "joint_limits"
+  ],
+  "title": "ArmStatusInfo",
+  "type": "object"
+}

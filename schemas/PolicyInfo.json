@@ -1,0 +1,44 @@
+{
+  "description": "GET /api/policies row (04-runtime \u00a713.1).",
+  "properties": {
+    "action_frame": {
+      "title": "Action Frame",
+      "type": "string"
+    },
+    "action_space": {
+      "enum": [
+        "delta_ee",
+        "abs_ee",
+        "joint"
+      ],
+      "title": "Action Space",
+      "type": "string"
+    },
+    "path": {
+      "title": "Path",
+      "type": "string"
+    },
+    "policy_id": {
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "policy_version": {
+      "title": "Policy Version",
+      "type": "integer"
+    },
+    "promoted": {
+      "default": false,
+      "title": "Promoted",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "policy_id",
+    "path",
+    "action_space",
+    "action_frame",
+    "policy_version"
+  ],
+  "title": "PolicyInfo",
+  "type": "object"
+}

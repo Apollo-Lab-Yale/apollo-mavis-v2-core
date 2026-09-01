@@ -1,0 +1,54 @@
+{
+  "description": "Landing-page camera card.",
+  "properties": {
+    "camera_id": {
+      "title": "Camera Id",
+      "type": "string"
+    },
+    "fps": {
+      "title": "Fps",
+      "type": "integer"
+    },
+    "kind": {
+      "enum": [
+        "v4l2",
+        "realsense",
+        "sim"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "live": {
+      "title": "Live",
+      "type": "boolean"
+    },
+    "resolution": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "integer"
+        }
+      ],
+      "title": "Resolution",
+      "type": "array"
+    }
+  },
+  "required": [
+    "camera_id",
+    "kind",
+    "label",
+    "resolution",
+    "fps",
+    "live"
+  ],
+  "title": "CameraInfo",
+  "type": "object"
+}

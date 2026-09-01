@@ -1,0 +1,36 @@
+{
+  "description": "Client -> server, once per press/click.",
+  "properties": {
+    "args": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Args",
+      "type": "object"
+    },
+    "name": {
+      "enum": [
+        "switch_arm",
+        "takeover_toggle",
+        "episode_new",
+        "episode_save",
+        "episode_discard",
+        "save_profile",
+        "set_initial_condition",
+        "joint_target"
+      ],
+      "title": "Name",
+      "type": "string"
+    },
+    "t": {
+      "const": "action",
+      "default": "action",
+      "title": "T",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "ActionMsg",
+  "type": "object"
+}

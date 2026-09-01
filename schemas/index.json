@@ -1,0 +1,24 @@
+{
+  "core_version": "0.1.0",
+  "models": [
+    "AckMsg",
+    "ActionMsg",
+    "ArmStatusInfo",
+    "CameraInfo",
+    "CollisionEvent",
+    "HelloMsg",
+    "JointTargetArgs",
+    "KeymapEntry",
+    "KeysMsg",
+    "PolicyInfo",
+    "ProfileInfo",
+    "SaveProfileArgs",
+    "SceneInfo",
+    "SessionInfo",
+    "SessionSpec",
+    "SetInitialConditionArgs",
+    "StateProfile",
+    "TelemetryMsg",
+    "WorkcellStatus"
+  ]
+}

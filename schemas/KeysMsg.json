@@ -1,0 +1,33 @@
+{
+  "description": "Controller -> server: immediate on every key transition + 25 Hz heartbeat.",
+  "properties": {
+    "held": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Held",
+      "type": "array"
+    },
+    "seq": {
+      "title": "Seq",
+      "type": "integer"
+    },
+    "t": {
+      "const": "keys",
+      "default": "keys",
+      "title": "T",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "number"
+    }
+  },
+  "required": [
+    "seq",
+    "ts",
+    "held"
+  ],
+  "title": "KeysMsg",
+  "type": "object"
+}

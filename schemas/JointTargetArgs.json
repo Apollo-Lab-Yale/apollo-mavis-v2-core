@@ -1,0 +1,31 @@
+{
+  "description": "Args for ``name == \"joint_target\"``.",
+  "properties": {
+    "arm_id": {
+      "title": "Arm Id",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "jog",
+        "goto"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "positions": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Positions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "arm_id",
+    "positions",
+    "mode"
+  ],
+  "title": "JointTargetArgs",
+  "type": "object"
+}

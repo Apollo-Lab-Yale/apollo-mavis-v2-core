@@ -1,0 +1,170 @@
+[
+  {
+    "action": "translate_x_pos",
+    "code": "KeyW",
+    "group": "translate",
+    "kind": "held",
+    "label": "+x (forward)",
+    "requires_rail": false
+  },
+  {
+    "action": "translate_x_neg",
+    "code": "KeyS",
+    "group": "translate",
+    "kind": "held",
+    "label": "-x (back)",
+    "requires_rail": false
+  },
+  {
+    "action": "translate_y_pos",
+    "code": "KeyA",
+    "group": "translate",
+    "kind": "held",
+    "label": "left",
+    "requires_rail": false
+  },
+  {
+    "action": "translate_y_neg",
+    "code": "KeyD",
+    "group": "translate",
+    "kind": "held",
+    "label": "right",
+    "requires_rail": false
+  },
+  {
+    "action": "translate_z_pos",
+    "code": "KeyE",
+    "group": "translate",
+    "kind": "held",
+    "label": "up",
+    "requires_rail": false
+  },
+  {
+    "action": "translate_z_neg",
+    "code": "KeyQ",
+    "group": "translate",
+    "kind": "held",
+    "label": "down",
+    "requires_rail": false
+  },
+  {
+    "action": "roll_pos",
+    "code": "KeyI",
+    "group": "rotate",
+    "kind": "held",
+    "label": "roll +",
+    "requires_rail": false
+  },
+  {
+    "action": "roll_neg",
+    "code": "KeyK",
+    "group": "rotate",
+    "kind": "held",
+    "label": "roll -",
+    "requires_rail": false
+  },
+  {
+    "action": "pitch_pos",
+    "code": "KeyJ",
+    "group": "rotate",
+    "kind": "held",
+    "label": "pitch +",
+    "requires_rail": false
+  },
+  {
+    "action": "pitch_neg",
+    "code": "KeyL",
+    "group": "rotate",
+    "kind": "held",
+    "label": "pitch -",
+    "requires_rail": false
+  },
+  {
+    "action": "yaw_pos",
+    "code": "KeyU",
+    "group": "rotate",
+    "kind": "held",
+    "label": "yaw +",
+    "requires_rail": false
+  },
+  {
+    "action": "yaw_neg",
+    "code": "KeyO",
+    "group": "rotate",
+    "kind": "held",
+    "label": "yaw -",
+    "requires_rail": false
+  },
+  {
+    "action": "gripper_close",
+    "code": "KeyF",
+    "group": "gripper",
+    "kind": "held",
+    "label": "gripper close",
+    "requires_rail": false
+  },
+  {
+    "action": "gripper_open",
+    "code": "KeyH",
+    "group": "gripper",
+    "kind": "held",
+    "label": "gripper open",
+    "requires_rail": false
+  },
+  {
+    "action": "rail_neg",
+    "code": "ArrowLeft",
+    "group": "rail",
+    "kind": "held",
+    "label": "rail left",
+    "requires_rail": true
+  },
+  {
+    "action": "rail_pos",
+    "code": "ArrowRight",
+    "group": "rail",
+    "kind": "held",
+    "label": "rail right",
+    "requires_rail": true
+  },
+  {
+    "action": "switch_arm",
+    "code": "Tab",
+    "group": "session",
+    "kind": "discrete",
+    "label": "switch active arm",
+    "requires_rail": false
+  },
+  {
+    "action": "takeover_toggle",
+    "code": "Space",
+    "group": "session",
+    "kind": "discrete",
+    "label": "takeover toggle (DAgger: recorded; inference: safety escape, never recorded)",
+    "requires_rail": false
+  },
+  {
+    "action": "episode_new",
+    "code": "KeyN",
+    "group": "episode",
+    "kind": "discrete",
+    "label": "start new episode",
+    "requires_rail": false
+  },
+  {
+    "action": "episode_save",
+    "code": "Enter",
+    "group": "episode",
+    "kind": "discrete",
+    "label": "save current episode",
+    "requires_rail": false
+  },
+  {
+    "action": "episode_discard",
+    "code": "Backspace",
+    "group": "episode",
+    "kind": "discrete",
+    "label": "discard current episode",
+    "requires_rail": false
+  }
+]
