@@ -33,6 +33,7 @@ from apollo_xarm7_core.protocol.session import (
 from apollo_xarm7_core.protocol.telemetry import (
     ArmTelemetry,
     ClearanceItem,
+    ControllerTelemetry,
     DaggerStatus,
     EpisodeStatus,
     InferenceStatus,
@@ -61,6 +62,20 @@ _ARM = ArmTelemetry(
 
 _TRACKER_SETTINGS = TrackerSettingsMsg(yaw_deg=90.0, pos_scale=1.5, follow_rotation=True)
 
+# Controller with trigger clicked and trackpad pressed near the top edge
+# (13-tracker §1.1: -> KeyC + KeyH injected).
+_CONTROLLER = ControllerTelemetry(
+    trigger=1.0,
+    trigger_pressed=True,
+    trackpad_touch=True,
+    trackpad_click=True,
+    trackpad_x=-0.12,
+    trackpad_y=0.85,
+    grip=False,
+    menu=False,
+    system=False,
+)
+
 # Device-only block (no session): session fields stay None.
 _TRACKER_IDLE = TrackerTelemetry(
     backend="none", status="no_backend", detail="pysurvive not installed",
@@ -82,6 +97,8 @@ _TRACKER_ENGAGED = TrackerTelemetry(
     anchor_tcp=_POSE,
     target_tcp=PoseMsg(position=(0.31, 0.02, 0.4), orientation=(1.0, 0.0, 0.0, 0.0)),
     settings=_TRACKER_SETTINGS,
+    controller=_CONTROLLER,
+    device_held=["KeyC", "KeyH"],
 )
 
 _WIRE_MODELS: list[BaseModel] = [
@@ -118,6 +135,8 @@ _WIRE_MODELS: list[BaseModel] = [
     InferenceStatus(control_mode=ControlMode.POLICY, engaged_arm=None, policy_version="r/v000001"),
     SessionTelemetry(state="RUNNING", start_from_progress=0.5, plan_status="planning"),
     _TRACKER_SETTINGS,
+    ControllerTelemetry(),
+    _CONTROLLER,
     _TRACKER_IDLE,
     _TRACKER_ENGAGED,
     TelemetryMsg(
@@ -219,6 +238,39 @@ def test_discriminated_union_parses_mixed_transcript():
         parse_client_msg(json.dumps({"t": "ack", "name": "switch_arm", "ok": True}))
     with pytest.raises(ValidationError):
         parse_client_msg(json.dumps({"t": "telemetry"}))
+
+
+def test_controller_telemetry_defaults_are_released():
+    """13-tracker §1.1: an untouched controller reads as all-zero / all-False."""
+    c = ControllerTelemetry()
+    assert c.trigger == 0.0 and c.trackpad_x == 0.0 and c.trackpad_y == 0.0
+    assert not any([
+        c.trigger_pressed, c.trackpad_touch, c.trackpad_click, c.grip, c.menu, c.system,
+    ])
+    assert set(ControllerTelemetry.model_fields) == {
+        "trigger", "trigger_pressed", "trackpad_touch", "trackpad_click",
+        "trackpad_x", "trackpad_y", "grip", "menu", "system",
+    }
+
+
+def test_tracker_telemetry_controller_fields_are_additive():
+    """Pre-controller producers (no ``controller``/``device_held``) still parse."""
+    legacy = _TRACKER_IDLE.model_dump(mode="json")
+    legacy.pop("controller")
+    legacy.pop("device_held")
+    parsed = TrackerTelemetry.model_validate(legacy)
+    assert parsed.controller is None
+    assert parsed.device_held == []
+    # default_factory: instances must not share the list.
+    other = TrackerTelemetry.model_validate(legacy)
+    parsed.device_held.append("KeyC")
+    assert other.device_held == []
+    # Wire form carries both new keys (UI shape), controller as a nested object.
+    wire = json.loads(_TRACKER_ENGAGED.model_dump_json())
+    assert wire["device_held"] == ["KeyC", "KeyH"]
+    assert wire["controller"]["trigger_pressed"] is True
+    assert wire["controller"]["trackpad_y"] == 0.85
+    assert TrackerTelemetry.model_validate(wire) == _TRACKER_ENGAGED
 
 
 def test_action_name_literal_rejects_unknown():

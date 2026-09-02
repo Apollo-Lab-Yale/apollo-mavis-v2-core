@@ -38,6 +38,7 @@ from .session import (
 from .telemetry import (
     ArmTelemetry,
     ClearanceItem,
+    ControllerTelemetry,
     DaggerStatus,
     EpisodeStatus,
     InferenceStatus,
@@ -80,6 +81,7 @@ __all__ = [
     "InferenceStatus",
     "SessionTelemetry",
     "TrackerSettingsMsg",
+    "ControllerTelemetry",
     "TrackerTelemetry",
     "TelemetryMsg",
     # session

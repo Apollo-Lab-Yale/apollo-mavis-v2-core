@@ -272,6 +272,58 @@
       "title": "ControlMode",
       "type": "string"
     },
+    "ControllerTelemetry": {
+      "description": "Raw Vive-controller input state (13-tracker \u00a71.1), additive.\n\nMirrors the libsurvive button/axis events for the tracked object. Axis\nconventions: ``trigger`` 0..1; ``trackpad_x``/``trackpad_y`` -1..1 with\n+y = top. ``trackpad_touch`` is finger contact, ``trackpad_click`` the\nphysical press. ``menu`` + ``system`` is the pairing combo (never mapped).",
+      "properties": {
+        "grip": {
+          "default": false,
+          "title": "Grip",
+          "type": "boolean"
+        },
+        "menu": {
+          "default": false,
+          "title": "Menu",
+          "type": "boolean"
+        },
+        "system": {
+          "default": false,
+          "title": "System",
+          "type": "boolean"
+        },
+        "trackpad_click": {
+          "default": false,
+          "title": "Trackpad Click",
+          "type": "boolean"
+        },
+        "trackpad_touch": {
+          "default": false,
+          "title": "Trackpad Touch",
+          "type": "boolean"
+        },
+        "trackpad_x": {
+          "default": 0.0,
+          "title": "Trackpad X",
+          "type": "number"
+        },
+        "trackpad_y": {
+          "default": 0.0,
+          "title": "Trackpad Y",
+          "type": "number"
+        },
+        "trigger": {
+          "default": 0.0,
+          "title": "Trigger",
+          "type": "number"
+        },
+        "trigger_pressed": {
+          "default": false,
+          "title": "Trigger Pressed",
+          "type": "boolean"
+        }
+      },
+      "title": "ControllerTelemetry",
+      "type": "object"
+    },
     "DaggerStatus": {
       "description": "DAgger session block; full shape per 12-dagger \u00a711 (canonical).",
       "properties": {
@@ -561,7 +613,7 @@
       "type": "object"
     },
     "TrackerTelemetry": {
-      "description": "Vive-tracker block (13-tracker \u00a73.5), additive.\n\nDevice fields are populated even without a session; session fields\n(``engaged_arm``, ``anchor_tcp``, ``target_tcp``) are ``None`` otherwise.",
+      "description": "Vive-tracker block (13-tracker \u00a73.5), additive.\n\nDevice fields are populated even without a session; session fields\n(``engaged_arm``, ``anchor_tcp``, ``target_tcp``) are ``None`` otherwise.\n``controller`` echoes the raw controller inputs (``None`` when the backend\nreports no controller) and ``device_held`` the key codes the runtime\ninjects from them (13-tracker \u00a71.1); a stale sample yields an empty list.",
       "properties": {
         "age_s": {
           "anyOf": [
@@ -600,10 +652,28 @@
           "title": "Clutch",
           "type": "boolean"
         },
+        "controller": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ControllerTelemetry"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "detail": {
           "default": "",
           "title": "Detail",
           "type": "string"
+        },
+        "device_held": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Device Held",
+          "type": "array"
         },
         "engaged_arm": {
           "anyOf": [

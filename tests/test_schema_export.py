@@ -71,16 +71,39 @@ def test_telemetry_schema_embeds_tracker_block(tmp_path):
     out = tmp_path / "schemas"
     export(out)
     telemetry = json.loads((out / "TelemetryMsg.json").read_text())
-    assert {"TrackerTelemetry", "TrackerSettingsMsg", "PoseMsg"} <= set(telemetry["$defs"])
+    assert {
+        "TrackerTelemetry", "TrackerSettingsMsg", "ControllerTelemetry", "PoseMsg",
+    } <= set(telemetry["$defs"])
     assert "tracker" in telemetry["properties"]
     tracker = telemetry["$defs"]["TrackerTelemetry"]
     assert set(tracker["properties"]) == {
         "backend", "status", "detail", "object_name", "seq", "rate_hz", "age_s",
         "pose_raw", "pose_world", "clutch", "engaged_arm", "anchor_tcp", "target_tcp",
-        "settings",
+        "settings", "controller", "device_held",
     }
     assert set(tracker["properties"]["status"]["enum"]) == {
         "no_backend", "starting", "searching", "tracking", "stale", "error",
+    }
+    # 13-tracker §1.1: controller block is nullable, device_held a string list.
+    controller_ref = tracker["properties"]["controller"]
+    assert {"$ref": "#/$defs/ControllerTelemetry"} in controller_ref["anyOf"]
+    assert {"type": "null"} in controller_ref["anyOf"]
+    assert controller_ref["default"] is None
+    device_held = tracker["properties"]["device_held"]
+    assert device_held["type"] == "array" and device_held["items"] == {"type": "string"}
+    # default_factory=list -> optional on the wire (no "default" key is emitted).
+    assert not {"controller", "device_held"} & set(tracker["required"])
+    controller = telemetry["$defs"]["ControllerTelemetry"]
+    assert set(controller["properties"]) == {
+        "trigger", "trigger_pressed", "trackpad_touch", "trackpad_click",
+        "trackpad_x", "trackpad_y", "grip", "menu", "system",
+    }
+    assert "required" not in controller  # every field defaults to released
+    assert controller["properties"]["trigger"] == {
+        "type": "number", "default": 0.0, "title": "Trigger",
+    }
+    assert controller["properties"]["grip"] == {
+        "type": "boolean", "default": False, "title": "Grip",
     }
     settings_args = json.loads((out / "TrackerSettingsArgs.json").read_text())
     pos_scale = settings_args["properties"]["pos_scale"]

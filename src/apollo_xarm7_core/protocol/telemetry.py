@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from apollo_xarm7_core.dagger.types import ControlMode, TrainerStatus
 from apollo_xarm7_core.schemas.safety import CollisionReport
@@ -93,11 +93,34 @@ class TrackerSettingsMsg(BaseModel):
     follow_rotation: bool  # orientation deltas applied when True
 
 
+class ControllerTelemetry(BaseModel):
+    """Raw Vive-controller input state (13-tracker §1.1), additive.
+
+    Mirrors the libsurvive button/axis events for the tracked object. Axis
+    conventions: ``trigger`` 0..1; ``trackpad_x``/``trackpad_y`` -1..1 with
+    +y = top. ``trackpad_touch`` is finger contact, ``trackpad_click`` the
+    physical press. ``menu`` + ``system`` is the pairing combo (never mapped).
+    """
+
+    trigger: float = 0.0  # analog pull, 0..1
+    trigger_pressed: bool = False  # trigger click (button 0)
+    trackpad_touch: bool = False  # finger on the pad (TOUCH_DOWN/UP)
+    trackpad_click: bool = False  # pad pressed (button 1)
+    trackpad_x: float = 0.0  # -1..1
+    trackpad_y: float = 0.0  # -1..1, +y = top
+    grip: bool = False  # button 7
+    menu: bool = False  # button 6
+    system: bool = False  # button 3
+
+
 class TrackerTelemetry(BaseModel):
     """Vive-tracker block (13-tracker §3.5), additive.
 
     Device fields are populated even without a session; session fields
     (``engaged_arm``, ``anchor_tcp``, ``target_tcp``) are ``None`` otherwise.
+    ``controller`` echoes the raw controller inputs (``None`` when the backend
+    reports no controller) and ``device_held`` the key codes the runtime
+    injects from them (13-tracker §1.1); a stale sample yields an empty list.
     """
 
     backend: Literal["libsurvive", "fake", "none"]
@@ -114,6 +137,8 @@ class TrackerTelemetry(BaseModel):
     anchor_tcp: PoseMsg | None = None  # EE pose at engagement (world)
     target_tcp: PoseMsg | None = None  # current tracker-derived EE target (world)
     settings: TrackerSettingsMsg
+    controller: ControllerTelemetry | None = None  # raw controller inputs (§1.1)
+    device_held: list[str] = Field(default_factory=list)  # codes injected from controller
 
 
 class TelemetryMsg(BaseModel):
@@ -144,6 +169,7 @@ __all__ = [
     "InferenceStatus",
     "SessionTelemetry",
     "TrackerSettingsMsg",
+    "ControllerTelemetry",
     "TrackerTelemetry",
     "TelemetryMsg",
 ]
