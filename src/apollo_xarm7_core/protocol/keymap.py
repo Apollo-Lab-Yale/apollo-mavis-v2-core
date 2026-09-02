@@ -1,8 +1,10 @@
-"""Canonical keymap (design doc 01-core §13; spine 00-overview §5).
+"""Canonical keymap (design doc 01-core §13; spine 00-overview §5; 13-tracker §3).
 
 ``GET /api/keymap`` serves exactly this table; the UI builds its bound-key
 set from it — no hardcoded duplicate (binding). ``axis_map`` is the single
-source of signs for runtime's ``held_to_twist``.
+source of signs for runtime's ``held_to_twist``. The optional ``gamepad``
+field carries the XInput control label so the UI never hard-codes the pad
+mapping either.
 """
 
 from __future__ import annotations
@@ -11,16 +13,19 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+Group = Literal["translate", "rotate", "gripper", "rail", "session", "episode", "tracker"]
+
 
 class KeymapEntry(BaseModel):
-    """One keyboard binding row."""
+    """One keyboard binding row (optionally mirrored on the gamepad)."""
 
     code: str  # KeyboardEvent.code
-    action: str  # held: axis name; discrete: ActionName
+    action: str  # held: axis name or held modifier; discrete: ActionName
     kind: Literal["held", "discrete"]
     label: str  # overlay text
-    group: Literal["translate", "rotate", "gripper", "rail", "session", "episode"]
+    group: Group
     requires_rail: bool = False
+    gamepad: str | None = None  # XInput control: DpadLeft/DpadRight/A/B/LB/RB/RT
 
 
 def _e(
@@ -28,11 +33,18 @@ def _e(
     action: str,
     kind: Literal["held", "discrete"],
     label: str,
-    group: Literal["translate", "rotate", "gripper", "rail", "session", "episode"],
+    group: Group,
     requires_rail: bool = False,
+    gamepad: str | None = None,
 ) -> KeymapEntry:
     return KeymapEntry(
-        code=code, action=action, kind=kind, label=label, group=group, requires_rail=requires_rail
+        code=code,
+        action=action,
+        kind=kind,
+        label=label,
+        group=group,
+        requires_rail=requires_rail,
+        gamepad=gamepad,
     )
 
 
@@ -55,14 +67,19 @@ KEYMAP: tuple[KeymapEntry, ...] = (
     _e("KeyL", "pitch_neg", "held", "pitch -", "rotate"),
     _e("KeyU", "yaw_pos", "held", "yaw +", "rotate"),
     _e("KeyO", "yaw_neg", "held", "yaw -", "rotate"),
-    # held / gripper
-    _e("KeyF", "gripper_close", "held", "gripper close", "gripper"),
-    _e("KeyH", "gripper_open", "held", "gripper open", "gripper"),
-    # held / rail (only if rail detected; 0-0.65 m)
-    _e("ArrowLeft", "rail_neg", "held", "rail left", "rail", requires_rail=True),
-    _e("ArrowRight", "rail_pos", "held", "rail right", "rail", requires_rail=True),
-    # discrete / session
-    _e("Tab", "switch_arm", "discrete", "switch active arm", "session"),
+    # held / gripper (gamepad A / B; 13-tracker §1)
+    _e("KeyF", "gripper_close", "held", "gripper close", "gripper", gamepad="B"),
+    _e("KeyH", "gripper_open", "held", "gripper open", "gripper", gamepad="A"),
+    # held / rail (only if rail detected; 0-0.65 m; gamepad D-pad)
+    _e("ArrowLeft", "rail_neg", "held", "rail left", "rail", requires_rail=True,
+       gamepad="DpadLeft"),
+    _e("ArrowRight", "rail_pos", "held", "rail right", "rail", requires_rail=True,
+       gamepad="DpadRight"),
+    # held / tracker (modifier, not an axis; gamepad RT held >= 0.5)
+    _e("KeyC", "tracker_clutch", "held", "tracker clutch (hold)", "tracker", gamepad="RT"),
+    # discrete / session (gamepad LB / RB)
+    _e("KeyZ", "switch_arm_prev", "discrete", "previous arm", "session", gamepad="LB"),
+    _e("Tab", "switch_arm", "discrete", "switch active arm", "session", gamepad="RB"),
     _e("Space", "takeover_toggle", "discrete", _SPACE_LABEL, "session"),
     # discrete / episode (always listed; runtime nacks without a recorder)
     _e("KeyN", "episode_new", "discrete", "start new episode", "episode"),
@@ -73,7 +90,12 @@ KEYMAP: tuple[KeymapEntry, ...] = (
 HELD_CODES: frozenset[str] = frozenset(e.code for e in KEYMAP if e.kind == "held")
 DISCRETE_CODES: dict[str, str] = {e.code: e.action for e in KEYMAP if e.kind == "discrete"}
 
-# Held action -> (axis, sign). Sign conventions (documented, binding here):
+# Held actions that are NOT axes (13-tracker §3.3): they gate behaviour while
+# held instead of driving a twist. ``axis_map`` excludes them and runtime's
+# ``held_to_twist`` ignores them.
+HELD_MODIFIER_ACTIONS: frozenset[str] = frozenset({"tracker_clutch"})
+
+# Held axis action -> (axis, sign). Sign conventions (documented, binding here):
 #   x: +1 forward          y: +1 left            z: +1 up
 #   roll/pitch/yaw: +1 = the *_pos action, about TCP axes
 #   gripper: axis is open-fraction rate — open = +1, close = -1 (toward closed)
@@ -99,7 +121,10 @@ _AXIS_MAP: dict[str, tuple[str, float]] = {
 
 
 def axis_map() -> dict[str, tuple[str, float]]:
-    """Held action -> ``(axis, sign)``; the single source of teleop signs."""
+    """Held axis action -> ``(axis, sign)``; the single source of teleop signs.
+
+    Held modifiers (:data:`HELD_MODIFIER_ACTIONS`) are deliberately absent.
+    """
     return dict(_AXIS_MAP)
 
 
@@ -108,5 +133,6 @@ __all__ = [
     "KEYMAP",
     "HELD_CODES",
     "DISCRETE_CODES",
+    "HELD_MODIFIER_ACTIONS",
     "axis_map",
 ]

@@ -9,13 +9,15 @@
     "name": {
       "enum": [
         "switch_arm",
+        "switch_arm_prev",
         "takeover_toggle",
         "episode_new",
         "episode_save",
         "episode_discard",
         "save_profile",
         "set_initial_condition",
-        "joint_target"
+        "joint_target",
+        "tracker_settings"
       ],
       "title": "Name",
       "type": "string"

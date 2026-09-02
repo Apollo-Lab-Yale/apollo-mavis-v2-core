@@ -85,6 +85,37 @@ class SessionTelemetry(BaseModel):
     trainer_alive: bool | None = None
 
 
+class TrackerSettingsMsg(BaseModel):
+    """Live tracker teleop settings echoed in telemetry (13-tracker §3.5)."""
+
+    yaw_deg: float  # lighthouse-world -> MJCF-world yaw alignment
+    pos_scale: float  # tracker displacement -> EE displacement gain
+    follow_rotation: bool  # orientation deltas applied when True
+
+
+class TrackerTelemetry(BaseModel):
+    """Vive-tracker block (13-tracker §3.5), additive.
+
+    Device fields are populated even without a session; session fields
+    (``engaged_arm``, ``anchor_tcp``, ``target_tcp``) are ``None`` otherwise.
+    """
+
+    backend: Literal["libsurvive", "fake", "none"]
+    status: Literal["no_backend", "starting", "searching", "tracking", "stale", "error"]
+    detail: str = ""  # human-readable reason for error/no_backend
+    object_name: str = ""  # libsurvive object used (e.g. "WM0")
+    seq: int = 0  # last sample sequence number
+    rate_hz: float = 0.0  # measured sample rate
+    age_s: float | None = None  # now - rx_mono of the last sample
+    pose_raw: PoseMsg | None = None  # lighthouse world
+    pose_world: PoseMsg | None = None  # after yaw alignment
+    clutch: bool = False  # tracker_clutch currently held
+    engaged_arm: str | None = None  # arm being driven while clutched
+    anchor_tcp: PoseMsg | None = None  # EE pose at engagement (world)
+    target_tcp: PoseMsg | None = None  # current tracker-derived EE target (world)
+    settings: TrackerSettingsMsg
+
+
 class TelemetryMsg(BaseModel):
     """One 25 Hz telemetry frame."""
 
@@ -101,6 +132,7 @@ class TelemetryMsg(BaseModel):
     dagger: DaggerStatus | None  # None outside DAgger
     inference: InferenceStatus | None  # None outside inference
     session: SessionTelemetry | None = None  # additive
+    tracker: TrackerTelemetry | None = None  # additive (13-tracker §3.5)
 
 
 __all__ = [
@@ -111,5 +143,7 @@ __all__ = [
     "DaggerStatus",
     "InferenceStatus",
     "SessionTelemetry",
+    "TrackerSettingsMsg",
+    "TrackerTelemetry",
     "TelemetryMsg",
 ]

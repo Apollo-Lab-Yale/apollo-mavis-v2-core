@@ -16,6 +16,7 @@ from apollo_xarm7_core.protocol.control import (
     KeysMsg,
     SaveProfileArgs,
     SetInitialConditionArgs,
+    TrackerSettingsArgs,
     parse_client_msg,
     validate_action_args,
 )
@@ -38,6 +39,8 @@ from apollo_xarm7_core.protocol.telemetry import (
     PoseMsg,
     SessionTelemetry,
     TelemetryMsg,
+    TrackerSettingsMsg,
+    TrackerTelemetry,
 )
 from apollo_xarm7_core.schemas.safety import CollisionReport
 
@@ -56,17 +59,46 @@ _ARM = ArmTelemetry(
     goto="executing",
 )
 
+_TRACKER_SETTINGS = TrackerSettingsMsg(yaw_deg=90.0, pos_scale=1.5, follow_rotation=True)
+
+# Device-only block (no session): session fields stay None.
+_TRACKER_IDLE = TrackerTelemetry(
+    backend="none", status="no_backend", detail="pysurvive not installed",
+    settings=_TRACKER_SETTINGS,
+)
+
+# Engaged block: every optional field populated.
+_TRACKER_ENGAGED = TrackerTelemetry(
+    backend="libsurvive",
+    status="tracking",
+    object_name="WM0",
+    seq=1234,
+    rate_hz=248.5,
+    age_s=0.004,
+    pose_raw=_POSE,
+    pose_world=PoseMsg(position=(0.0, 0.3, 0.4), orientation=(0.7071, 0.0, 0.0, 0.7071)),
+    clutch=True,
+    engaged_arm="arm0",
+    anchor_tcp=_POSE,
+    target_tcp=PoseMsg(position=(0.31, 0.02, 0.4), orientation=(1.0, 0.0, 0.0, 0.0)),
+    settings=_TRACKER_SETTINGS,
+)
+
 _WIRE_MODELS: list[BaseModel] = [
     HelloMsg(epoch="ep0", session_id="s0", role="controller"),
     HelloMsg(epoch="ep0", session_id=None, role="observer"),
     KeysMsg(seq=7, ts=123.5, held=["KeyW", "ArrowRight"]),
     ActionMsg(name="switch_arm"),
+    ActionMsg(name="switch_arm_prev"),
     ActionMsg(name="joint_target", args={"arm_id": "arm0", "positions": [0.0] * 8, "mode": "jog"}),
+    ActionMsg(name="tracker_settings", args={"pos_scale": 1.5, "follow_rotation": False}),
     AckMsg(name="takeover_toggle", ok=False, detail="observer"),
     JointTargetArgs(arm_id="arm0", positions=[0.1] * 7, mode="goto"),
     SaveProfileArgs(name="home", notes="pre-demo"),
     SetInitialConditionArgs(profile_id="abc123"),
     SetInitialConditionArgs(),
+    TrackerSettingsArgs(yaw_deg=-45.0, pos_scale=0.5, follow_rotation=False),
+    TrackerSettingsArgs(),
     _POSE,
     _ARM,
     ClearanceItem(pair=("arm0/link5", "arm1/link3"), dist_m=0.031),
@@ -85,6 +117,9 @@ _WIRE_MODELS: list[BaseModel] = [
     ),
     InferenceStatus(control_mode=ControlMode.POLICY, engaged_arm=None, policy_version="r/v000001"),
     SessionTelemetry(state="RUNNING", start_from_progress=0.5, plan_status="planning"),
+    _TRACKER_SETTINGS,
+    _TRACKER_IDLE,
+    _TRACKER_ENGAGED,
     TelemetryMsg(
         seq=1,
         ts=12.0,
@@ -98,6 +133,7 @@ _WIRE_MODELS: list[BaseModel] = [
         dagger=None,
         inference=None,
         session=SessionTelemetry(state="RUNNING"),
+        tracker=_TRACKER_ENGAGED,
     ),
     SessionSpec(
         mode="collect",
@@ -160,11 +196,19 @@ def test_discriminated_union_parses_mixed_transcript():
                 "args": {"arm_id": "arm0", "positions": [0.0] * 8, "mode": "goto"},
             }
         ),
+        json.dumps({"t": "keys", "seq": 3, "ts": 0.3, "held": ["KeyC", "ArrowLeft"]}),
+        json.dumps({"t": "action", "name": "switch_arm_prev"}),
+        json.dumps({"t": "action", "name": "tracker_settings", "args": {"yaw_deg": 90.0}}),
     ]
     parsed = [parse_client_msg(line) for line in transcript]
-    assert [type(m) for m in parsed] == [KeysMsg, ActionMsg, KeysMsg, ActionMsg, ActionMsg]
+    assert [type(m) for m in parsed] == [
+        KeysMsg, ActionMsg, KeysMsg, ActionMsg, ActionMsg, KeysMsg, ActionMsg, ActionMsg,
+    ]
     assert parsed[0].held == ["KeyW"]
     assert parsed[3].name == "takeover_toggle"
+    assert parsed[5].held == ["KeyC", "ArrowLeft"]  # clutch rides KeysMsg.held
+    assert parsed[6].name == "switch_arm_prev"
+    assert parsed[7].args == {"yaw_deg": 90.0}
 
     # Bytes parse too; server messages are rejected on the client channel.
     assert isinstance(parse_client_msg(transcript[0].encode()), KeysMsg)
@@ -222,15 +266,54 @@ def test_validate_action_args_per_name():
     assert isinstance(sp, SaveProfileArgs) and sp.notes == ""
     sic = validate_action_args(ActionMsg(name="set_initial_condition", args={}))
     assert isinstance(sic, SetInitialConditionArgs) and sic.profile_id is None
+    ts = validate_action_args(ActionMsg(name="tracker_settings", args={"pos_scale": 2.0}))
+    assert isinstance(ts, TrackerSettingsArgs)
+    assert (ts.yaw_deg, ts.pos_scale, ts.follow_rotation) == (None, 2.0, None)
 
     # Actions without an args model require empty args and return None.
-    for name in ("switch_arm", "takeover_toggle", "episode_new", "episode_save",
-                 "episode_discard"):
+    for name in ("switch_arm", "switch_arm_prev", "takeover_toggle", "episode_new",
+                 "episode_save", "episode_discard"):
         assert validate_action_args(ActionMsg(name=name)) is None
     with pytest.raises(ValueError):
         validate_action_args(ActionMsg(name="switch_arm", args={"index": 1}))
+    with pytest.raises(ValueError):
+        validate_action_args(ActionMsg(name="switch_arm_prev", args={"index": 1}))
     with pytest.raises(ValidationError):
         validate_action_args(ActionMsg(name="joint_target", args={"arm_id": "arm0"}))
+    with pytest.raises(ValidationError):
+        validate_action_args(ActionMsg(name="tracker_settings", args={"pos_scale": 5.0}))
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        {},  # all fields omitted = unchanged
+        {"yaw_deg": 90.0},
+        {"yaw_deg": -180.0, "pos_scale": 0.1, "follow_rotation": False},  # lower bound
+        {"pos_scale": 3.0},  # upper bound
+        {"pos_scale": 1, "follow_rotation": True},  # int coerces to float
+    ],
+)
+def test_tracker_settings_args_accept(args):
+    parsed = TrackerSettingsArgs.model_validate(args)
+    assert parsed.model_dump(exclude_none=True) == {k: float(v) if k == "pos_scale" else v
+                                                    for k, v in args.items()}
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        {"pos_scale": 5.0},  # > 3.0
+        {"pos_scale": 0.05},  # < 0.1
+        {"pos_scale": 0.0},
+        {"pos_scale": "fast"},
+        {"yaw_deg": "north"},
+        {"follow_rotation": "maybe"},  # not a recognised bool spelling
+    ],
+)
+def test_tracker_settings_args_reject(args):
+    with pytest.raises(ValidationError):
+        TrackerSettingsArgs.model_validate(args)
 
 
 def _spec(**overrides) -> SessionSpec:

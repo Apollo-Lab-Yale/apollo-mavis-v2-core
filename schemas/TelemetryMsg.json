@@ -536,6 +536,159 @@
       "title": "SessionTelemetry",
       "type": "object"
     },
+    "TrackerSettingsMsg": {
+      "description": "Live tracker teleop settings echoed in telemetry (13-tracker \u00a73.5).",
+      "properties": {
+        "follow_rotation": {
+          "title": "Follow Rotation",
+          "type": "boolean"
+        },
+        "pos_scale": {
+          "title": "Pos Scale",
+          "type": "number"
+        },
+        "yaw_deg": {
+          "title": "Yaw Deg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "yaw_deg",
+        "pos_scale",
+        "follow_rotation"
+      ],
+      "title": "TrackerSettingsMsg",
+      "type": "object"
+    },
+    "TrackerTelemetry": {
+      "description": "Vive-tracker block (13-tracker \u00a73.5), additive.\n\nDevice fields are populated even without a session; session fields\n(``engaged_arm``, ``anchor_tcp``, ``target_tcp``) are ``None`` otherwise.",
+      "properties": {
+        "age_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Age S"
+        },
+        "anchor_tcp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PoseMsg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "backend": {
+          "enum": [
+            "libsurvive",
+            "fake",
+            "none"
+          ],
+          "title": "Backend",
+          "type": "string"
+        },
+        "clutch": {
+          "default": false,
+          "title": "Clutch",
+          "type": "boolean"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "engaged_arm": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engaged Arm"
+        },
+        "object_name": {
+          "default": "",
+          "title": "Object Name",
+          "type": "string"
+        },
+        "pose_raw": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PoseMsg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "pose_world": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PoseMsg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rate_hz": {
+          "default": 0.0,
+          "title": "Rate Hz",
+          "type": "number"
+        },
+        "seq": {
+          "default": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "settings": {
+          "$ref": "#/$defs/TrackerSettingsMsg"
+        },
+        "status": {
+          "enum": [
+            "no_backend",
+            "starting",
+            "searching",
+            "tracking",
+            "stale",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "target_tcp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PoseMsg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "backend",
+        "status",
+        "settings"
+      ],
+      "title": "TrackerTelemetry",
+      "type": "object"
+    },
     "TrainerStatus": {
       "description": "Trainer health; pydantic \u2014 rides telemetry (\u00a711).",
       "properties": {
@@ -691,6 +844,17 @@
       "default": "telemetry",
       "title": "T",
       "type": "string"
+    },
+    "tracker": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TrackerTelemetry"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "ts": {
       "title": "Ts",

@@ -2,6 +2,7 @@
   {
     "action": "translate_x_pos",
     "code": "KeyW",
+    "gamepad": null,
     "group": "translate",
     "kind": "held",
     "label": "+x (forward)",
@@ -10,6 +11,7 @@
   {
     "action": "translate_x_neg",
     "code": "KeyS",
+    "gamepad": null,
     "group": "translate",
     "kind": "held",
     "label": "-x (back)",
@@ -18,6 +20,7 @@
   {
     "action": "translate_y_pos",
     "code": "KeyA",
+    "gamepad": null,
     "group": "translate",
     "kind": "held",
     "label": "left",
@@ -26,6 +29,7 @@
   {
     "action": "translate_y_neg",
     "code": "KeyD",
+    "gamepad": null,
     "group": "translate",
     "kind": "held",
     "label": "right",
@@ -34,6 +38,7 @@
   {
     "action": "translate_z_pos",
     "code": "KeyE",
+    "gamepad": null,
     "group": "translate",
     "kind": "held",
     "label": "up",
@@ -42,6 +47,7 @@
   {
     "action": "translate_z_neg",
     "code": "KeyQ",
+    "gamepad": null,
     "group": "translate",
     "kind": "held",
     "label": "down",
@@ -50,6 +56,7 @@
   {
     "action": "roll_pos",
     "code": "KeyI",
+    "gamepad": null,
     "group": "rotate",
     "kind": "held",
     "label": "roll +",
@@ -58,6 +65,7 @@
   {
     "action": "roll_neg",
     "code": "KeyK",
+    "gamepad": null,
     "group": "rotate",
     "kind": "held",
     "label": "roll -",
@@ -66,6 +74,7 @@
   {
     "action": "pitch_pos",
     "code": "KeyJ",
+    "gamepad": null,
     "group": "rotate",
     "kind": "held",
     "label": "pitch +",
@@ -74,6 +83,7 @@
   {
     "action": "pitch_neg",
     "code": "KeyL",
+    "gamepad": null,
     "group": "rotate",
     "kind": "held",
     "label": "pitch -",
@@ -82,6 +92,7 @@
   {
     "action": "yaw_pos",
     "code": "KeyU",
+    "gamepad": null,
     "group": "rotate",
     "kind": "held",
     "label": "yaw +",
@@ -90,6 +101,7 @@
   {
     "action": "yaw_neg",
     "code": "KeyO",
+    "gamepad": null,
     "group": "rotate",
     "kind": "held",
     "label": "yaw -",
@@ -98,6 +110,7 @@
   {
     "action": "gripper_close",
     "code": "KeyF",
+    "gamepad": "B",
     "group": "gripper",
     "kind": "held",
     "label": "gripper close",
@@ -106,6 +119,7 @@
   {
     "action": "gripper_open",
     "code": "KeyH",
+    "gamepad": "A",
     "group": "gripper",
     "kind": "held",
     "label": "gripper open",
@@ -114,6 +128,7 @@
   {
     "action": "rail_neg",
     "code": "ArrowLeft",
+    "gamepad": "DpadLeft",
     "group": "rail",
     "kind": "held",
     "label": "rail left",
@@ -122,14 +137,34 @@
   {
     "action": "rail_pos",
     "code": "ArrowRight",
+    "gamepad": "DpadRight",
     "group": "rail",
     "kind": "held",
     "label": "rail right",
     "requires_rail": true
   },
   {
+    "action": "tracker_clutch",
+    "code": "KeyC",
+    "gamepad": "RT",
+    "group": "tracker",
+    "kind": "held",
+    "label": "tracker clutch (hold)",
+    "requires_rail": false
+  },
+  {
+    "action": "switch_arm_prev",
+    "code": "KeyZ",
+    "gamepad": "LB",
+    "group": "session",
+    "kind": "discrete",
+    "label": "previous arm",
+    "requires_rail": false
+  },
+  {
     "action": "switch_arm",
     "code": "Tab",
+    "gamepad": "RB",
     "group": "session",
     "kind": "discrete",
     "label": "switch active arm",
@@ -138,6 +173,7 @@
   {
     "action": "takeover_toggle",
     "code": "Space",
+    "gamepad": null,
     "group": "session",
     "kind": "discrete",
     "label": "takeover toggle (DAgger: recorded; inference: safety escape, never recorded)",
@@ -146,6 +182,7 @@
   {
     "action": "episode_new",
     "code": "KeyN",
+    "gamepad": null,
     "group": "episode",
     "kind": "discrete",
     "label": "start new episode",
@@ -154,6 +191,7 @@
   {
     "action": "episode_save",
     "code": "Enter",
+    "gamepad": null,
     "group": "episode",
     "kind": "discrete",
     "label": "save current episode",
@@ -162,6 +200,7 @@
   {
     "action": "episode_discard",
     "code": "Backspace",
+    "gamepad": null,
     "group": "episode",
     "kind": "discrete",
     "label": "discard current episode",

@@ -19,6 +19,7 @@
     "SetInitialConditionArgs",
     "StateProfile",
     "TelemetryMsg",
+    "TrackerSettingsArgs",
     "WorkcellStatus"
   ]
 }

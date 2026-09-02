@@ -33,7 +33,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "JointTargetArgs": control.JointTargetArgs,
     "SaveProfileArgs": control.SaveProfileArgs,
     "SetInitialConditionArgs": control.SetInitialConditionArgs,
-    # telemetry (§11; embeds sub-models via $defs)
+    "TrackerSettingsArgs": control.TrackerSettingsArgs,
+    # telemetry (§11; embeds sub-models incl. TrackerTelemetry via $defs)
     "TelemetryMsg": telemetry.TelemetryMsg,
     # session (§12)
     "SessionSpec": session.SessionSpec,

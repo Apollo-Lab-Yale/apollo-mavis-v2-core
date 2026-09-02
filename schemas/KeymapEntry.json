@@ -1,5 +1,5 @@
 {
-  "description": "One keyboard binding row.",
+  "description": "One keyboard binding row (optionally mirrored on the gamepad).",
   "properties": {
     "action": {
       "title": "Action",
@@ -9,6 +9,18 @@
       "title": "Code",
       "type": "string"
     },
+    "gamepad": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gamepad"
+    },
     "group": {
       "enum": [
         "translate",
@@ -16,7 +28,8 @@
         "gripper",
         "rail",
         "session",
-        "episode"
+        "episode",
+        "tracker"
       ],
       "title": "Group",
       "type": "string"

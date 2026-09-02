@@ -58,8 +58,35 @@ def test_index_and_keymap_contents(tmp_path):
     assert index["models"] == sorted(EXPORTED_MODELS)
     assert isinstance(index["core_version"], str) and index["core_version"]
     keymap = json.loads((out / "keymap.json").read_text())
-    assert isinstance(keymap, list) and len(keymap) >= 21
-    assert {row["code"] for row in keymap} >= {"KeyW", "Space", "ArrowRight"}
+    assert isinstance(keymap, list) and len(keymap) == 23
+    assert {row["code"] for row in keymap} >= {"KeyW", "Space", "ArrowRight", "KeyC", "KeyZ"}
+    # 13-tracker §3: every row carries the (nullable) gamepad field.
+    assert all("gamepad" in row for row in keymap)
+    gamepads = {row["code"]: row["gamepad"] for row in keymap}
+    assert gamepads["KeyC"] == "RT" and gamepads["KeyZ"] == "LB" and gamepads["KeyW"] is None
+
+
+def test_telemetry_schema_embeds_tracker_block(tmp_path):
+    """TrackerTelemetry rides TelemetryMsg's $defs (no top-level export needed)."""
+    out = tmp_path / "schemas"
+    export(out)
+    telemetry = json.loads((out / "TelemetryMsg.json").read_text())
+    assert {"TrackerTelemetry", "TrackerSettingsMsg", "PoseMsg"} <= set(telemetry["$defs"])
+    assert "tracker" in telemetry["properties"]
+    tracker = telemetry["$defs"]["TrackerTelemetry"]
+    assert set(tracker["properties"]) == {
+        "backend", "status", "detail", "object_name", "seq", "rate_hz", "age_s",
+        "pose_raw", "pose_world", "clutch", "engaged_arm", "anchor_tcp", "target_tcp",
+        "settings",
+    }
+    assert set(tracker["properties"]["status"]["enum"]) == {
+        "no_backend", "starting", "searching", "tracking", "stale", "error",
+    }
+    settings_args = json.loads((out / "TrackerSettingsArgs.json").read_text())
+    pos_scale = settings_args["properties"]["pos_scale"]
+    assert {"minimum": 0.1, "maximum": 3.0}.items() <= (
+        next(v for v in pos_scale["anyOf"] if v.get("type") == "number").items()
+    )
 
 
 def test_exported_models_cover_spec_sections():
@@ -68,6 +95,7 @@ def test_exported_models_cover_spec_sections():
         # control
         "HelloMsg", "KeysMsg", "ActionMsg", "AckMsg",
         "JointTargetArgs", "SaveProfileArgs", "SetInitialConditionArgs",
+        "TrackerSettingsArgs",
         # telemetry
         "TelemetryMsg",
         # session

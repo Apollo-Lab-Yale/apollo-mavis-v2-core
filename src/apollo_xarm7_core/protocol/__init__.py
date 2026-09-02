@@ -11,10 +11,18 @@ from .control import (
     KeysMsg,
     SaveProfileArgs,
     SetInitialConditionArgs,
+    TrackerSettingsArgs,
     parse_client_msg,
     validate_action_args,
 )
-from .keymap import DISCRETE_CODES, HELD_CODES, KEYMAP, KeymapEntry, axis_map
+from .keymap import (
+    DISCRETE_CODES,
+    HELD_CODES,
+    HELD_MODIFIER_ACTIONS,
+    KEYMAP,
+    KeymapEntry,
+    axis_map,
+)
 from .session import (
     START_FROM_RE,
     ArmStatusInfo,
@@ -36,6 +44,8 @@ from .telemetry import (
     PoseMsg,
     SessionTelemetry,
     TelemetryMsg,
+    TrackerSettingsMsg,
+    TrackerTelemetry,
 )
 from .video import (
     HEADER_FMT,
@@ -56,6 +66,7 @@ __all__ = [
     "JointTargetArgs",
     "SaveProfileArgs",
     "SetInitialConditionArgs",
+    "TrackerSettingsArgs",
     "ControlClientMsg",
     "ControlServerMsg",
     "parse_client_msg",
@@ -68,6 +79,8 @@ __all__ = [
     "DaggerStatus",
     "InferenceStatus",
     "SessionTelemetry",
+    "TrackerSettingsMsg",
+    "TrackerTelemetry",
     "TelemetryMsg",
     # session
     "Mode",
@@ -92,5 +105,6 @@ __all__ = [
     "KEYMAP",
     "HELD_CODES",
     "DISCRETE_CODES",
+    "HELD_MODIFIER_ACTIONS",
     "axis_map",
 ]

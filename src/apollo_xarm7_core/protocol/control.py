@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, TypeAdapter
 
 ActionName = Literal[
     "switch_arm",
+    "switch_arm_prev",
     "takeover_toggle",
     "episode_new",
     "episode_save",
@@ -21,6 +22,7 @@ ActionName = Literal[
     "save_profile",
     "set_initial_condition",
     "joint_target",
+    "tracker_settings",
 ]
 
 
@@ -80,6 +82,18 @@ class SetInitialConditionArgs(BaseModel):
     profile_id: str | None = None  # None: save current state first, then designate
 
 
+class TrackerSettingsArgs(BaseModel):
+    """Args for ``name == "tracker_settings"`` (13-tracker §3.4).
+
+    Every field is optional; omitted (``None``) fields leave the live runtime
+    setting unchanged.
+    """
+
+    yaw_deg: float | None = None  # lighthouse-world -> MJCF-world yaw alignment
+    pos_scale: float | None = Field(default=None, ge=0.1, le=3.0)  # tracker->EE gain
+    follow_rotation: bool | None = None  # apply tracker orientation deltas
+
+
 ControlClientMsg = Annotated[KeysMsg | ActionMsg, Field(discriminator="t")]
 ControlServerMsg = Annotated[HelloMsg | AckMsg, Field(discriminator="t")]
 
@@ -90,6 +104,7 @@ _ARGS_MODELS: dict[str, type[BaseModel]] = {
     "joint_target": JointTargetArgs,
     "save_profile": SaveProfileArgs,
     "set_initial_condition": SetInitialConditionArgs,
+    "tracker_settings": TrackerSettingsArgs,
 }
 
 
@@ -102,8 +117,9 @@ def validate_action_args(msg: ActionMsg) -> BaseModel | None:
     """Validate ``msg.args`` against the per-name model.
 
     Returns the parsed args model for joint_target / save_profile /
-    set_initial_condition; for every other action, requires ``args == {}``
-    and returns None. Raises pydantic ``ValidationError`` / ``ValueError``.
+    set_initial_condition / tracker_settings; for every other action
+    (incl. switch_arm / switch_arm_prev), requires ``args == {}`` and returns
+    None. Raises pydantic ``ValidationError`` / ``ValueError``.
     """
     model = _ARGS_MODELS.get(msg.name)
     if model is None:
@@ -122,6 +138,7 @@ __all__ = [
     "JointTargetArgs",
     "SaveProfileArgs",
     "SetInitialConditionArgs",
+    "TrackerSettingsArgs",
     "ControlClientMsg",
     "ControlServerMsg",
     "parse_client_msg",

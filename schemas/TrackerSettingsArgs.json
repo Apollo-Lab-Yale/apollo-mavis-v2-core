@@ -1,0 +1,45 @@
+{
+  "description": "Args for ``name == \"tracker_settings\"`` (13-tracker \u00a73.4).\n\nEvery field is optional; omitted (``None``) fields leave the live runtime\nsetting unchanged.",
+  "properties": {
+    "follow_rotation": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Follow Rotation"
+    },
+    "pos_scale": {
+      "anyOf": [
+        {
+          "maximum": 3.0,
+          "minimum": 0.1,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pos Scale"
+    },
+    "yaw_deg": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Yaw Deg"
+    }
+  },
+  "title": "TrackerSettingsArgs",
+  "type": "object"
+}
