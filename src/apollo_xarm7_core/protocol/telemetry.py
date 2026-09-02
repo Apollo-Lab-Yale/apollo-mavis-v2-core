@@ -86,11 +86,19 @@ class SessionTelemetry(BaseModel):
 
 
 class TrackerSettingsMsg(BaseModel):
-    """Live tracker teleop settings echoed in telemetry (13-tracker §3.5)."""
+    """Live tracker teleop settings echoed in telemetry (13-tracker §3.5, §4).
+
+    The ``filter_*`` fields are the *effective* One Euro pose-filter settings
+    (config defaults, overridable live via ``tracker_settings``); they default
+    here so pre-filter producers still validate.
+    """
 
     yaw_deg: float  # lighthouse-world -> MJCF-world yaw alignment
     pos_scale: float  # tracker displacement -> EE displacement gain
     follow_rotation: bool  # orientation deltas applied when True
+    filter_enabled: bool = True  # One Euro pose filter active (additive)
+    filter_min_cutoff_hz: float = 1.0  # One Euro min cutoff, Hz (additive)
+    filter_beta: float = 0.05  # One Euro speed coefficient (additive)
 
 
 class ControllerTelemetry(BaseModel):
@@ -121,6 +129,10 @@ class TrackerTelemetry(BaseModel):
     ``controller`` echoes the raw controller inputs (``None`` when the backend
     reports no controller) and ``device_held`` the key codes the runtime
     injects from them (13-tracker §1.1); a stale sample yields an empty list.
+    ``device_action`` is the last device-sourced discrete action (e.g.
+    ``"switch_arm"``), cleared by the runtime ~1 s after it fired.
+    ``pose_filtered`` is the aligned pose after the One Euro filter (§4), i.e.
+    what the anchor/delta math actually consumes; ``None`` when no sample.
     """
 
     backend: Literal["libsurvive", "fake", "none"]
@@ -132,6 +144,7 @@ class TrackerTelemetry(BaseModel):
     age_s: float | None = None  # now - rx_mono of the last sample
     pose_raw: PoseMsg | None = None  # lighthouse world
     pose_world: PoseMsg | None = None  # after yaw alignment
+    pose_filtered: PoseMsg | None = None  # world, after alignment + pose filter (§4)
     clutch: bool = False  # tracker_clutch currently held
     engaged_arm: str | None = None  # arm being driven while clutched
     anchor_tcp: PoseMsg | None = None  # EE pose at engagement (world)
@@ -139,6 +152,7 @@ class TrackerTelemetry(BaseModel):
     settings: TrackerSettingsMsg
     controller: ControllerTelemetry | None = None  # raw controller inputs (§1.1)
     device_held: list[str] = Field(default_factory=list)  # codes injected from controller
+    device_action: str | None = None  # last device-sourced discrete action (~1 s latch)
 
 
 class TelemetryMsg(BaseModel):

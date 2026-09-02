@@ -61,6 +61,11 @@ _ARM = ArmTelemetry(
 )
 
 _TRACKER_SETTINGS = TrackerSettingsMsg(yaw_deg=90.0, pos_scale=1.5, follow_rotation=True)
+# Non-default pose-filter tuning (13-tracker §4 "Pose filter").
+_TRACKER_SETTINGS_TUNED = TrackerSettingsMsg(
+    yaw_deg=0.0, pos_scale=1.0, follow_rotation=False,
+    filter_enabled=False, filter_min_cutoff_hz=2.5, filter_beta=0.2,
+)
 
 # Controller with trigger clicked and trackpad pressed near the top edge
 # (13-tracker §1.1: -> KeyC + KeyH injected).
@@ -92,13 +97,15 @@ _TRACKER_ENGAGED = TrackerTelemetry(
     age_s=0.004,
     pose_raw=_POSE,
     pose_world=PoseMsg(position=(0.0, 0.3, 0.4), orientation=(0.7071, 0.0, 0.0, 0.7071)),
+    pose_filtered=PoseMsg(position=(0.001, 0.299, 0.4), orientation=(0.7071, 0.0, 0.0, 0.7071)),
     clutch=True,
     engaged_arm="arm0",
     anchor_tcp=_POSE,
     target_tcp=PoseMsg(position=(0.31, 0.02, 0.4), orientation=(1.0, 0.0, 0.0, 0.0)),
-    settings=_TRACKER_SETTINGS,
+    settings=_TRACKER_SETTINGS_TUNED,
     controller=_CONTROLLER,
     device_held=["KeyC", "KeyH"],
+    device_action="switch_arm",
 )
 
 _WIRE_MODELS: list[BaseModel] = [
@@ -109,12 +116,14 @@ _WIRE_MODELS: list[BaseModel] = [
     ActionMsg(name="switch_arm_prev"),
     ActionMsg(name="joint_target", args={"arm_id": "arm0", "positions": [0.0] * 8, "mode": "jog"}),
     ActionMsg(name="tracker_settings", args={"pos_scale": 1.5, "follow_rotation": False}),
+    ActionMsg(name="tracker_settings", args={"filter_min_cutoff_hz": 0.5, "filter_beta": 0.0}),
     AckMsg(name="takeover_toggle", ok=False, detail="observer"),
     JointTargetArgs(arm_id="arm0", positions=[0.1] * 7, mode="goto"),
     SaveProfileArgs(name="home", notes="pre-demo"),
     SetInitialConditionArgs(profile_id="abc123"),
     SetInitialConditionArgs(),
     TrackerSettingsArgs(yaw_deg=-45.0, pos_scale=0.5, follow_rotation=False),
+    TrackerSettingsArgs(filter_enabled=False, filter_min_cutoff_hz=0.05, filter_beta=5.0),
     TrackerSettingsArgs(),
     _POSE,
     _ARM,
@@ -135,6 +144,7 @@ _WIRE_MODELS: list[BaseModel] = [
     InferenceStatus(control_mode=ControlMode.POLICY, engaged_arm=None, policy_version="r/v000001"),
     SessionTelemetry(state="RUNNING", start_from_progress=0.5, plan_status="planning"),
     _TRACKER_SETTINGS,
+    _TRACKER_SETTINGS_TUNED,
     ControllerTelemetry(),
     _CONTROLLER,
     _TRACKER_IDLE,
@@ -273,6 +283,50 @@ def test_tracker_telemetry_controller_fields_are_additive():
     assert TrackerTelemetry.model_validate(wire) == _TRACKER_ENGAGED
 
 
+def test_tracker_settings_msg_filter_fields_default_and_round_trip():
+    """13-tracker §4: filter settings are additive with the runtime's defaults."""
+    legacy = TrackerSettingsMsg.model_validate(
+        {"yaw_deg": 0.0, "pos_scale": 1.0, "follow_rotation": True}
+    )
+    assert (legacy.filter_enabled, legacy.filter_min_cutoff_hz, legacy.filter_beta) == (
+        True, 1.0, 0.05,
+    )
+    assert set(TrackerSettingsMsg.model_fields) == {
+        "yaw_deg", "pos_scale", "follow_rotation",
+        "filter_enabled", "filter_min_cutoff_hz", "filter_beta",
+    }
+    # Telemetry echoes the effective (possibly tuned) settings verbatim.
+    wire = json.loads(_TRACKER_SETTINGS_TUNED.model_dump_json())
+    assert wire["filter_enabled"] is False
+    assert wire["filter_min_cutoff_hz"] == 2.5 and wire["filter_beta"] == 0.2
+    assert TrackerSettingsMsg.model_validate(wire) == _TRACKER_SETTINGS_TUNED
+    # Legacy wire form (no filter keys) still validates inside TrackerTelemetry.
+    with pytest.raises(ValidationError):
+        TrackerSettingsMsg.model_validate({"yaw_deg": 0.0, "pos_scale": 1.0})
+
+
+def test_tracker_telemetry_filter_and_device_action_fields_are_additive():
+    """Pre-filter producers (no ``pose_filtered``/``device_action``) still parse."""
+    legacy = _TRACKER_ENGAGED.model_dump(mode="json")
+    legacy.pop("pose_filtered")
+    legacy.pop("device_action")
+    for key in ("filter_enabled", "filter_min_cutoff_hz", "filter_beta"):
+        legacy["settings"].pop(key)
+    parsed = TrackerTelemetry.model_validate(legacy)
+    assert parsed.pose_filtered is None and parsed.device_action is None
+    assert parsed.settings.filter_enabled is True
+    # Wire form carries both keys; pose_filtered is a nested PoseMsg.
+    wire = json.loads(_TRACKER_ENGAGED.model_dump_json())
+    assert wire["device_action"] == "switch_arm"
+    assert wire["pose_filtered"]["position"] == [0.001, 0.299, 0.4]
+    assert wire["settings"]["filter_min_cutoff_hz"] == 2.5
+    assert TrackerTelemetry.model_validate(wire) == _TRACKER_ENGAGED
+    # Idle block: filtered pose absent, no action fired.
+    idle = json.loads(_TRACKER_IDLE.model_dump_json())
+    assert idle["pose_filtered"] is None and idle["device_action"] is None
+    assert idle["settings"]["filter_enabled"] is True
+
+
 def test_action_name_literal_rejects_unknown():
     with pytest.raises(ValidationError):
         ActionMsg(name="warp_drive")
@@ -321,6 +375,14 @@ def test_validate_action_args_per_name():
     ts = validate_action_args(ActionMsg(name="tracker_settings", args={"pos_scale": 2.0}))
     assert isinstance(ts, TrackerSettingsArgs)
     assert (ts.yaw_deg, ts.pos_scale, ts.follow_rotation) == (None, 2.0, None)
+    assert (ts.filter_enabled, ts.filter_min_cutoff_hz, ts.filter_beta) == (None, None, None)
+    tf = validate_action_args(
+        ActionMsg(name="tracker_settings",
+                  args={"filter_enabled": False, "filter_min_cutoff_hz": 0.8, "filter_beta": 0.1})
+    )
+    assert isinstance(tf, TrackerSettingsArgs)
+    assert (tf.filter_enabled, tf.filter_min_cutoff_hz, tf.filter_beta) == (False, 0.8, 0.1)
+    assert (tf.yaw_deg, tf.pos_scale, tf.follow_rotation) == (None, None, None)
 
     # Actions without an args model require empty args and return None.
     for name in ("switch_arm", "switch_arm_prev", "takeover_toggle", "episode_new",
@@ -334,6 +396,10 @@ def test_validate_action_args_per_name():
         validate_action_args(ActionMsg(name="joint_target", args={"arm_id": "arm0"}))
     with pytest.raises(ValidationError):
         validate_action_args(ActionMsg(name="tracker_settings", args={"pos_scale": 5.0}))
+    with pytest.raises(ValidationError):
+        validate_action_args(
+            ActionMsg(name="tracker_settings", args={"filter_min_cutoff_hz": 0.0})
+        )
 
 
 @pytest.mark.parametrize(
@@ -344,12 +410,20 @@ def test_validate_action_args_per_name():
         {"yaw_deg": -180.0, "pos_scale": 0.1, "follow_rotation": False},  # lower bound
         {"pos_scale": 3.0},  # upper bound
         {"pos_scale": 1, "follow_rotation": True},  # int coerces to float
+        {"filter_enabled": False},  # bypass the pose filter
+        {"filter_min_cutoff_hz": 0.05, "filter_beta": 0.0},  # filter lower bounds
+        {"filter_min_cutoff_hz": 50.0, "filter_beta": 5.0},  # filter upper bounds
+        {"filter_min_cutoff_hz": 1, "filter_beta": 1},  # int coerces to float
+        {"yaw_deg": 45.0, "filter_enabled": True, "filter_min_cutoff_hz": 1.0,
+         "filter_beta": 0.05},  # mixed alignment + filter
     ],
 )
 def test_tracker_settings_args_accept(args):
     parsed = TrackerSettingsArgs.model_validate(args)
-    assert parsed.model_dump(exclude_none=True) == {k: float(v) if k == "pos_scale" else v
-                                                    for k, v in args.items()}
+    assert parsed.model_dump(exclude_none=True) == {
+        k: float(v) if isinstance(v, int) and not isinstance(v, bool) else v
+        for k, v in args.items()
+    }
 
 
 @pytest.mark.parametrize(
@@ -361,6 +435,14 @@ def test_tracker_settings_args_accept(args):
         {"pos_scale": "fast"},
         {"yaw_deg": "north"},
         {"follow_rotation": "maybe"},  # not a recognised bool spelling
+        {"filter_min_cutoff_hz": 0.0},  # < 0.05 (a zero cutoff freezes the filter)
+        {"filter_min_cutoff_hz": 0.01},
+        {"filter_min_cutoff_hz": 100.0},  # > 50
+        {"filter_min_cutoff_hz": "slow"},
+        {"filter_beta": -1},  # < 0
+        {"filter_beta": -0.001},
+        {"filter_beta": 5.5},  # > 5
+        {"filter_enabled": "maybe"},
     ],
 )
 def test_tracker_settings_args_reject(args):

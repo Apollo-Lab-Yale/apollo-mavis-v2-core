@@ -589,8 +589,23 @@
       "type": "object"
     },
     "TrackerSettingsMsg": {
-      "description": "Live tracker teleop settings echoed in telemetry (13-tracker \u00a73.5).",
+      "description": "Live tracker teleop settings echoed in telemetry (13-tracker \u00a73.5, \u00a74).\n\nThe ``filter_*`` fields are the *effective* One Euro pose-filter settings\n(config defaults, overridable live via ``tracker_settings``); they default\nhere so pre-filter producers still validate.",
       "properties": {
+        "filter_beta": {
+          "default": 0.05,
+          "title": "Filter Beta",
+          "type": "number"
+        },
+        "filter_enabled": {
+          "default": true,
+          "title": "Filter Enabled",
+          "type": "boolean"
+        },
+        "filter_min_cutoff_hz": {
+          "default": 1.0,
+          "title": "Filter Min Cutoff Hz",
+          "type": "number"
+        },
         "follow_rotation": {
           "title": "Follow Rotation",
           "type": "boolean"
@@ -613,7 +628,7 @@
       "type": "object"
     },
     "TrackerTelemetry": {
-      "description": "Vive-tracker block (13-tracker \u00a73.5), additive.\n\nDevice fields are populated even without a session; session fields\n(``engaged_arm``, ``anchor_tcp``, ``target_tcp``) are ``None`` otherwise.\n``controller`` echoes the raw controller inputs (``None`` when the backend\nreports no controller) and ``device_held`` the key codes the runtime\ninjects from them (13-tracker \u00a71.1); a stale sample yields an empty list.",
+      "description": "Vive-tracker block (13-tracker \u00a73.5), additive.\n\nDevice fields are populated even without a session; session fields\n(``engaged_arm``, ``anchor_tcp``, ``target_tcp``) are ``None`` otherwise.\n``controller`` echoes the raw controller inputs (``None`` when the backend\nreports no controller) and ``device_held`` the key codes the runtime\ninjects from them (13-tracker \u00a71.1); a stale sample yields an empty list.\n``device_action`` is the last device-sourced discrete action (e.g.\n``\"switch_arm\"``), cleared by the runtime ~1 s after it fired.\n``pose_filtered`` is the aligned pose after the One Euro filter (\u00a74), i.e.\nwhat the anchor/delta math actually consumes; ``None`` when no sample.",
       "properties": {
         "age_s": {
           "anyOf": [
@@ -668,6 +683,18 @@
           "title": "Detail",
           "type": "string"
         },
+        "device_action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Device Action"
+        },
         "device_held": {
           "items": {
             "type": "string"
@@ -691,6 +718,17 @@
           "default": "",
           "title": "Object Name",
           "type": "string"
+        },
+        "pose_filtered": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PoseMsg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "pose_raw": {
           "anyOf": [

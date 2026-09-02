@@ -83,15 +83,22 @@ class SetInitialConditionArgs(BaseModel):
 
 
 class TrackerSettingsArgs(BaseModel):
-    """Args for ``name == "tracker_settings"`` (13-tracker §3.4).
+    """Args for ``name == "tracker_settings"`` (13-tracker §3.4, §4 "Pose filter").
 
     Every field is optional; omitted (``None``) fields leave the live runtime
-    setting unchanged.
+    setting unchanged. The ``filter_*`` fields tune the runtime's One Euro pose
+    filter live (debug page); a change while the clutch is engaged re-anchors
+    instead of moving the arm (13-tracker §4 "Anchor and re-seed rules").
     """
 
     yaw_deg: float | None = None  # lighthouse-world -> MJCF-world yaw alignment
     pos_scale: float | None = Field(default=None, ge=0.1, le=3.0)  # tracker->EE gain
     follow_rotation: bool | None = None  # apply tracker orientation deltas
+    filter_enabled: bool | None = None  # False bypasses the One Euro pose filter
+    filter_min_cutoff_hz: float | None = Field(default=None, ge=0.05, le=50.0)
+    # One Euro min cutoff (Hz): lower = smoother at rest, more lag
+    filter_beta: float | None = Field(default=None, ge=0.0, le=5.0)
+    # One Euro speed coefficient: higher = less lag during fast motion
 
 
 ControlClientMsg = Annotated[KeysMsg | ActionMsg, Field(discriminator="t")]

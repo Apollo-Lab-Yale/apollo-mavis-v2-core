@@ -1,6 +1,46 @@
 {
-  "description": "Args for ``name == \"tracker_settings\"`` (13-tracker \u00a73.4).\n\nEvery field is optional; omitted (``None``) fields leave the live runtime\nsetting unchanged.",
+  "description": "Args for ``name == \"tracker_settings\"`` (13-tracker \u00a73.4, \u00a74 \"Pose filter\").\n\nEvery field is optional; omitted (``None``) fields leave the live runtime\nsetting unchanged. The ``filter_*`` fields tune the runtime's One Euro pose\nfilter live (debug page); a change while the clutch is engaged re-anchors\ninstead of moving the arm (13-tracker \u00a74 \"Anchor and re-seed rules\").",
   "properties": {
+    "filter_beta": {
+      "anyOf": [
+        {
+          "maximum": 5.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Filter Beta"
+    },
+    "filter_enabled": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Filter Enabled"
+    },
+    "filter_min_cutoff_hz": {
+      "anyOf": [
+        {
+          "maximum": 50.0,
+          "minimum": 0.05,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Filter Min Cutoff Hz"
+    },
     "follow_rotation": {
       "anyOf": [
         {

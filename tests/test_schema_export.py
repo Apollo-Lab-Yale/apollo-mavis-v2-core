@@ -78,8 +78,8 @@ def test_telemetry_schema_embeds_tracker_block(tmp_path):
     tracker = telemetry["$defs"]["TrackerTelemetry"]
     assert set(tracker["properties"]) == {
         "backend", "status", "detail", "object_name", "seq", "rate_hz", "age_s",
-        "pose_raw", "pose_world", "clutch", "engaged_arm", "anchor_tcp", "target_tcp",
-        "settings", "controller", "device_held",
+        "pose_raw", "pose_world", "pose_filtered", "clutch", "engaged_arm", "anchor_tcp",
+        "target_tcp", "settings", "controller", "device_held", "device_action",
     }
     assert set(tracker["properties"]["status"]["enum"]) == {
         "no_backend", "starting", "searching", "tracking", "stale", "error",
@@ -93,6 +93,32 @@ def test_telemetry_schema_embeds_tracker_block(tmp_path):
     assert device_held["type"] == "array" and device_held["items"] == {"type": "string"}
     # default_factory=list -> optional on the wire (no "default" key is emitted).
     assert not {"controller", "device_held"} & set(tracker["required"])
+    # 13-tracker §4: pose_filtered is a nullable PoseMsg; device_action a nullable string.
+    pose_filtered = tracker["properties"]["pose_filtered"]
+    assert {"$ref": "#/$defs/PoseMsg"} in pose_filtered["anyOf"]
+    assert {"type": "null"} in pose_filtered["anyOf"]
+    assert pose_filtered["default"] is None
+    device_action = tracker["properties"]["device_action"]
+    assert {"type": "string"} in device_action["anyOf"]
+    assert {"type": "null"} in device_action["anyOf"]
+    assert device_action["default"] is None
+    assert not {"pose_filtered", "device_action"} & set(tracker["required"])
+    # Effective filter settings ride TrackerSettingsMsg with defaults (additive).
+    settings = telemetry["$defs"]["TrackerSettingsMsg"]
+    assert set(settings["properties"]) == {
+        "yaw_deg", "pos_scale", "follow_rotation",
+        "filter_enabled", "filter_min_cutoff_hz", "filter_beta",
+    }
+    assert set(settings["required"]) == {"yaw_deg", "pos_scale", "follow_rotation"}
+    assert settings["properties"]["filter_enabled"] == {
+        "type": "boolean", "default": True, "title": "Filter Enabled",
+    }
+    assert settings["properties"]["filter_min_cutoff_hz"] == {
+        "type": "number", "default": 1.0, "title": "Filter Min Cutoff Hz",
+    }
+    assert settings["properties"]["filter_beta"] == {
+        "type": "number", "default": 0.05, "title": "Filter Beta",
+    }
     controller = telemetry["$defs"]["ControllerTelemetry"]
     assert set(controller["properties"]) == {
         "trigger", "trigger_pressed", "trackpad_touch", "trackpad_click",
@@ -106,10 +132,26 @@ def test_telemetry_schema_embeds_tracker_block(tmp_path):
         "type": "boolean", "default": False, "title": "Grip",
     }
     settings_args = json.loads((out / "TrackerSettingsArgs.json").read_text())
+    assert set(settings_args["properties"]) == {
+        "yaw_deg", "pos_scale", "follow_rotation",
+        "filter_enabled", "filter_min_cutoff_hz", "filter_beta",
+    }
+    assert "required" not in settings_args  # every field optional (= unchanged)
+
+    def _number_branch(prop):
+        return next(v for v in prop["anyOf"] if v.get("type") == "number")
+
     pos_scale = settings_args["properties"]["pos_scale"]
-    assert {"minimum": 0.1, "maximum": 3.0}.items() <= (
-        next(v for v in pos_scale["anyOf"] if v.get("type") == "number").items()
-    )
+    assert {"minimum": 0.1, "maximum": 3.0}.items() <= _number_branch(pos_scale).items()
+    min_cutoff = settings_args["properties"]["filter_min_cutoff_hz"]
+    assert {"minimum": 0.05, "maximum": 50.0}.items() <= _number_branch(min_cutoff).items()
+    assert {"type": "null"} in min_cutoff["anyOf"] and min_cutoff["default"] is None
+    beta = settings_args["properties"]["filter_beta"]
+    assert {"minimum": 0.0, "maximum": 5.0}.items() <= _number_branch(beta).items()
+    assert {"type": "null"} in beta["anyOf"] and beta["default"] is None
+    enabled = settings_args["properties"]["filter_enabled"]
+    assert {"type": "boolean"} in enabled["anyOf"] and {"type": "null"} in enabled["anyOf"]
+    assert enabled["default"] is None
 
 
 def test_exported_models_cover_spec_sections():
