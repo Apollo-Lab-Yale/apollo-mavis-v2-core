@@ -21,6 +21,12 @@ class PoseMsg(BaseModel):
     orientation: tuple[float, float, float, float]  # wxyz
 
 
+# ``protocol.tracker`` builds on PoseMsg and TrackerTelemetry (below) embeds its
+# status model, so the import must follow PoseMsg to keep the cycle importable;
+# the package ``__init__`` loads this module before ``tracker``.
+from apollo_xarm7_core.protocol.tracker import TrackerCalibrationStatus  # noqa: E402
+
+
 class ArmTelemetry(BaseModel):
     """Per-arm telemetry block."""
 
@@ -133,6 +139,8 @@ class TrackerTelemetry(BaseModel):
     ``"switch_arm"``), cleared by the runtime ~1 s after it fired.
     ``pose_filtered`` is the aligned pose after the One Euro filter (§4), i.e.
     what the anchor/delta math actually consumes; ``None`` when no sample.
+    ``calibration`` mirrors ``GET /api/tracker/calibration`` (protocol.tracker)
+    so the Devices-page wizard follows progress without polling.
     """
 
     backend: Literal["libsurvive", "fake", "none"]
@@ -153,6 +161,8 @@ class TrackerTelemetry(BaseModel):
     controller: ControllerTelemetry | None = None  # raw controller inputs (§1.1)
     device_held: list[str] = Field(default_factory=list)  # codes injected from controller
     device_action: str | None = None  # last device-sourced discrete action (~1 s latch)
+    charging: bool | None = None  # controller on external (USB) power; None = not reported
+    calibration: TrackerCalibrationStatus | None = None  # additive (phase-10 wizard)
 
 
 class TelemetryMsg(BaseModel):

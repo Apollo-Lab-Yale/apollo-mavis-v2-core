@@ -43,6 +43,13 @@ from apollo_xarm7_core.protocol.telemetry import (
     TrackerSettingsMsg,
     TrackerTelemetry,
 )
+from apollo_xarm7_core.protocol.tracker import (
+    CalibrationValidation,
+    LighthouseStatus,
+    TrackerCalibrationCommand,
+    TrackerCalibrationStatus,
+    YawGesturePoint,
+)
 from apollo_xarm7_core.schemas.safety import CollisionReport
 
 _POSE = PoseMsg(position=(0.3, 0.0, 0.4), orientation=(1.0, 0.0, 0.0, 0.0))
@@ -108,6 +115,81 @@ _TRACKER_ENGAGED = TrackerTelemetry(
     device_action="switch_arm",
 )
 
+# phase-10 calibration snapshots (13-tracker §3/§4): base-station capture in
+# progress with three stations, and a completed yaw fit awaiting `apply`.
+_LIGHTHOUSES = [
+    LighthouseStatus(index=0, channel=1, serial="LHB-2A3B4C5D", pose=_POSE, scenes=4,
+                     reference=True),
+    LighthouseStatus(index=1, channel=3, serial="LHB-6E7F8091",
+                     pose=PoseMsg(position=(-1.2, 0.8, 2.1),
+                                  orientation=(0.5, -0.5, 0.5, 0.5)),
+                     scenes=3),
+    LighthouseStatus(index=2, channel=None),  # OOTX not decoded yet
+]
+_CALIB_BASE_STATION = TrackerCalibrationStatus(
+    kind="base_station",
+    phase="capturing",
+    detail="scenes 4/6 — park the controller still >= 3 s at another spot",
+    started_at=1_756_900_000.0,
+    elapsed_s=42.5,
+    scenes=4,
+    lighthouses=_LIGHTHOUSES,
+    stations_visible=3,
+    controller_still=False,
+    yaw_valid=False,
+    base_station_installed_at=1_756_800_000.0,
+)
+_CALIB_VALIDATED = TrackerCalibrationStatus(
+    kind="base_station",
+    phase="done",
+    detail="validation passed — install",
+    scenes=7,
+    lighthouses=_LIGHTHOUSES,
+    stations_visible=3,
+    controller_still=True,
+    validation=CalibrationValidation(
+        samples=2480, std_mm=(0.08, 0.11, 0.06), max_step_mm=0.4, passed=True,
+    ),
+    installed_path="/home/op/.config/libsurvive/config.json",
+    backup_path="/home/op/.config/libsurvive/config.json.bak-20260903-141500",
+)
+_YAW_POINTS = [
+    YawGesturePoint(label=label, pose=PoseMsg(position=pos, orientation=(1.0, 0.0, 0.0, 0.0)))
+    for label, pos in (
+        ("start", (0.00, 0.00, 1.00)),
+        ("left", (0.25, 0.02, 1.01)),
+        ("forward", (0.26, 0.27, 1.00)),
+        ("right", (0.01, 0.28, 0.99)),
+        ("back", (0.00, 0.01, 1.00)),
+        ("up", (0.01, 0.00, 1.24)),
+        ("down", (0.00, 0.01, 1.00)),
+    )
+]
+_CALIB_YAW = TrackerCalibrationStatus(
+    kind="yaw",
+    phase="done",
+    detail="fit ok — apply",
+    started_at=1_756_900_100.0,
+    elapsed_s=18.0,
+    yaw_points=_YAW_POINTS,
+    next_point=None,
+    fitted_yaw_deg=102.1,
+    fit_residual_deg=1.7,
+    fit_checks=[],
+    yaw_valid=False,
+    yaw_calibrated_at=1_756_700_000.0,
+    base_station_installed_at=1_756_800_000.0,
+)
+_CALIB_YAW_FAILED_FIT = TrackerCalibrationStatus(
+    kind="yaw",
+    phase="done",
+    detail="fit checks failed — redo",
+    yaw_points=_YAW_POINTS,
+    fitted_yaw_deg=-77.9,
+    fit_residual_deg=22.3,
+    fit_checks=["leg left too short (0.04 m < 0.10 m)", "residual 22.3 deg > 15.0 deg"],
+)
+
 _WIRE_MODELS: list[BaseModel] = [
     HelloMsg(epoch="ep0", session_id="s0", role="controller"),
     HelloMsg(epoch="ep0", session_id=None, role="observer"),
@@ -149,6 +231,31 @@ _WIRE_MODELS: list[BaseModel] = [
     _CONTROLLER,
     _TRACKER_IDLE,
     _TRACKER_ENGAGED,
+    # phase-10 tracker calibration (REST + TrackerTelemetry.calibration)
+    LighthouseStatus(index=0),
+    *_LIGHTHOUSES,
+    CalibrationValidation(),
+    CalibrationValidation(samples=2480, std_mm=(61.0, 62.0, 53.0), max_step_mm=248.0,
+                          threshold_std_mm=5.0, threshold_step_mm=20.0, passed=False),
+    *_YAW_POINTS,
+    TrackerCalibrationStatus(),
+    _CALIB_BASE_STATION,
+    _CALIB_VALIDATED,
+    _CALIB_YAW,
+    _CALIB_YAW_FAILED_FIT,
+    TrackerCalibrationStatus(kind="base_station", phase="failed",
+                             detail="backend is not libsurvive"),
+    TrackerCalibrationStatus(kind="yaw", phase="aborted", yaw_valid=True,
+                             yaw_calibrated_at=1_756_700_000.0, applied_yaw_deg=102.1),
+    TrackerCalibrationCommand(kind="base_station", op="start"),
+    TrackerCalibrationCommand(kind="base_station", op="validate"),
+    TrackerCalibrationCommand(kind="yaw", op="capture"),
+    TrackerCalibrationCommand(kind="yaw", op="capture", point="forward"),
+    TrackerCalibrationCommand(kind="yaw", op="apply"),
+    TrackerCalibrationCommand(kind="yaw", op="abort"),
+    _TRACKER_ENGAGED.model_copy(update={"clutch": False, "calibration": _CALIB_BASE_STATION}),
+    _TRACKER_IDLE.model_copy(update={"backend": "fake", "status": "tracking",
+                                     "calibration": _CALIB_YAW}),
     TelemetryMsg(
         seq=1,
         ts=12.0,
@@ -325,6 +432,66 @@ def test_tracker_telemetry_filter_and_device_action_fields_are_additive():
     idle = json.loads(_TRACKER_IDLE.model_dump_json())
     assert idle["pose_filtered"] is None and idle["device_action"] is None
     assert idle["settings"]["filter_enabled"] is True
+
+
+def test_tracker_telemetry_charging_and_calibration_fields_are_additive():
+    """Pre-phase-10 producers (no ``charging``/``calibration``) still parse."""
+    assert set(TrackerTelemetry.model_fields) == {
+        "backend", "status", "detail", "object_name", "seq", "rate_hz", "age_s",
+        "pose_raw", "pose_world", "pose_filtered", "clutch", "engaged_arm", "anchor_tcp",
+        "target_tcp", "settings", "controller", "device_held", "device_action",
+        "charging", "calibration",
+    }
+    legacy = _TRACKER_ENGAGED.model_dump(mode="json")
+    legacy.pop("charging")
+    legacy.pop("calibration")
+    parsed = TrackerTelemetry.model_validate(legacy)
+    assert parsed.charging is None and parsed.calibration is None
+    # Wire form carries both keys; calibration is the nested status snapshot.
+    calibrating = _TRACKER_ENGAGED.model_copy(
+        update={"charging": True, "calibration": _CALIB_BASE_STATION}
+    )
+    wire = json.loads(calibrating.model_dump_json())
+    assert wire["charging"] is True
+    assert wire["calibration"]["kind"] == "base_station"
+    assert wire["calibration"]["phase"] == "capturing"
+    assert wire["calibration"]["scenes"] == 4
+    assert wire["calibration"]["lighthouses"][0]["reference"] is True
+    assert wire["calibration"]["lighthouses"][2]["channel"] is None
+    assert wire["calibration"]["yaw_valid"] is False
+    assert TrackerTelemetry.model_validate(wire) == calibrating
+    # Idle block: nothing reported.
+    idle = json.loads(_TRACKER_IDLE.model_dump_json())
+    assert idle["charging"] is None and idle["calibration"] is None
+    # Nested inside a full telemetry frame too.
+    frame = TelemetryMsg(
+        seq=2, ts=13.0, epoch="ep0", active_arm=None, controller_connected=False,
+        arms=[], collision=CollisionReport.ok(), clearances=[],
+        episode=None, dagger=None, inference=None, tracker=calibrating,
+    )
+    parsed_frame = TelemetryMsg.model_validate_json(frame.model_dump_json())
+    assert parsed_frame.tracker is not None
+    assert parsed_frame.tracker.calibration == _CALIB_BASE_STATION
+
+
+def test_tracker_calibration_model_fields_pinned():
+    """phase-10 wire shapes, spelled exactly (core is the spelling authority)."""
+    assert set(TrackerCalibrationStatus.model_fields) == {
+        "kind", "phase", "detail", "started_at", "elapsed_s",
+        "scenes", "lighthouses", "stations_visible", "controller_still", "validation",
+        "installed_path", "backup_path",
+        "yaw_points", "next_point", "fitted_yaw_deg", "fit_residual_deg", "fit_checks",
+        "applied_yaw_deg",
+        "yaw_valid", "yaw_calibrated_at", "base_station_installed_at",
+    }
+    assert set(TrackerCalibrationCommand.model_fields) == {"kind", "op", "point"}
+    assert set(LighthouseStatus.model_fields) == {
+        "index", "channel", "serial", "pose", "scenes", "reference",
+    }
+    assert set(CalibrationValidation.model_fields) == {
+        "samples", "std_mm", "max_step_mm", "threshold_std_mm", "threshold_step_mm", "passed",
+    }
+    assert set(YawGesturePoint.model_fields) == {"label", "pose"}
 
 
 def test_action_name_literal_rejects_unknown():

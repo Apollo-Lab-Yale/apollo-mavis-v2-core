@@ -1,0 +1,52 @@
+{
+  "description": "POST /api/tracker/calibration body (illegal transitions -> 409).",
+  "properties": {
+    "kind": {
+      "enum": [
+        "base_station",
+        "yaw"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "op": {
+      "enum": [
+        "start",
+        "capture",
+        "validate",
+        "install",
+        "apply",
+        "abort"
+      ],
+      "title": "Op",
+      "type": "string"
+    },
+    "point": {
+      "anyOf": [
+        {
+          "enum": [
+            "start",
+            "left",
+            "forward",
+            "right",
+            "back",
+            "up",
+            "down"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Point"
+    }
+  },
+  "required": [
+    "kind",
+    "op"
+  ],
+  "title": "TrackerCalibrationCommand",
+  "type": "object"
+}

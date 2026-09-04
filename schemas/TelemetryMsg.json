@@ -80,6 +80,60 @@
       "title": "ArmTelemetry",
       "type": "object"
     },
+    "CalibrationValidation": {
+      "description": "Stationary-controller validation result (13-tracker \u00a74).\n\nAcceptance (2026-09-03 measurements): every axis ``std_mm`` below\n``threshold_std_mm`` and ``max_step_mm`` below ``threshold_step_mm``.",
+      "properties": {
+        "max_step_mm": {
+          "default": 0.0,
+          "title": "Max Step Mm",
+          "type": "number"
+        },
+        "passed": {
+          "default": false,
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "samples": {
+          "default": 0,
+          "title": "Samples",
+          "type": "integer"
+        },
+        "std_mm": {
+          "default": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Std Mm",
+          "type": "array"
+        },
+        "threshold_std_mm": {
+          "default": 5.0,
+          "title": "Threshold Std Mm",
+          "type": "number"
+        },
+        "threshold_step_mm": {
+          "default": 20.0,
+          "title": "Threshold Step Mm",
+          "type": "number"
+        }
+      },
+      "title": "CalibrationValidation",
+      "type": "object"
+    },
     "ClearanceItem": {
       "description": "One monitored geometry pair at the measured config.",
       "properties": {
@@ -490,6 +544,65 @@
       "title": "InferenceStatus",
       "type": "object"
     },
+    "LighthouseStatus": {
+      "description": "One Lighthouse base station as seen during base-station calibration.",
+      "properties": {
+        "channel": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Channel"
+        },
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        },
+        "pose": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PoseMsg"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reference": {
+          "default": false,
+          "title": "Reference",
+          "type": "boolean"
+        },
+        "scenes": {
+          "default": 0,
+          "title": "Scenes",
+          "type": "integer"
+        },
+        "serial": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Serial"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "title": "LighthouseStatus",
+      "type": "object"
+    },
     "PoseMsg": {
       "description": "Wire pose: position in m, orientation as wxyz unit quaternion.",
       "properties": {
@@ -588,6 +701,232 @@
       "title": "SessionTelemetry",
       "type": "object"
     },
+    "TrackerCalibrationStatus": {
+      "description": "Calibration state machine snapshot (REST response + telemetry block).\n\n``kind``/``phase`` describe the flow in progress; the base-station and yaw\nfield groups are only meaningful for their own kind. The persisted-state\ngroup is always filled from ``calibration_dir/tracker_calibration.json``.",
+      "properties": {
+        "applied_yaw_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Applied Yaw Deg"
+        },
+        "backup_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backup Path"
+        },
+        "base_station_installed_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Station Installed At"
+        },
+        "controller_still": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Controller Still"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "elapsed_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed S"
+        },
+        "fit_checks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fit Checks",
+          "type": "array"
+        },
+        "fit_residual_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fit Residual Deg"
+        },
+        "fitted_yaw_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fitted Yaw Deg"
+        },
+        "installed_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Installed Path"
+        },
+        "kind": {
+          "default": "none",
+          "enum": [
+            "none",
+            "base_station",
+            "yaw"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "lighthouses": {
+          "items": {
+            "$ref": "#/$defs/LighthouseStatus"
+          },
+          "title": "Lighthouses",
+          "type": "array"
+        },
+        "next_point": {
+          "anyOf": [
+            {
+              "enum": [
+                "start",
+                "left",
+                "forward",
+                "right",
+                "back",
+                "up",
+                "down"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Point"
+        },
+        "phase": {
+          "default": "idle",
+          "enum": [
+            "idle",
+            "starting",
+            "capturing",
+            "validating",
+            "fitting",
+            "installing",
+            "done",
+            "failed",
+            "aborted"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "scenes": {
+          "default": 0,
+          "title": "Scenes",
+          "type": "integer"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "stations_visible": {
+          "default": 0,
+          "title": "Stations Visible",
+          "type": "integer"
+        },
+        "validation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CalibrationValidation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "yaw_calibrated_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Yaw Calibrated At"
+        },
+        "yaw_points": {
+          "items": {
+            "$ref": "#/$defs/YawGesturePoint"
+          },
+          "title": "Yaw Points",
+          "type": "array"
+        },
+        "yaw_valid": {
+          "default": true,
+          "title": "Yaw Valid",
+          "type": "boolean"
+        }
+      },
+      "title": "TrackerCalibrationStatus",
+      "type": "object"
+    },
     "TrackerSettingsMsg": {
       "description": "Live tracker teleop settings echoed in telemetry (13-tracker \u00a73.5, \u00a74).\n\nThe ``filter_*`` fields are the *effective* One Euro pose-filter settings\n(config defaults, overridable live via ``tracker_settings``); they default\nhere so pre-filter producers still validate.",
       "properties": {
@@ -628,7 +967,7 @@
       "type": "object"
     },
     "TrackerTelemetry": {
-      "description": "Vive-tracker block (13-tracker \u00a73.5), additive.\n\nDevice fields are populated even without a session; session fields\n(``engaged_arm``, ``anchor_tcp``, ``target_tcp``) are ``None`` otherwise.\n``controller`` echoes the raw controller inputs (``None`` when the backend\nreports no controller) and ``device_held`` the key codes the runtime\ninjects from them (13-tracker \u00a71.1); a stale sample yields an empty list.\n``device_action`` is the last device-sourced discrete action (e.g.\n``\"switch_arm\"``), cleared by the runtime ~1 s after it fired.\n``pose_filtered`` is the aligned pose after the One Euro filter (\u00a74), i.e.\nwhat the anchor/delta math actually consumes; ``None`` when no sample.",
+      "description": "Vive-tracker block (13-tracker \u00a73.5), additive.\n\nDevice fields are populated even without a session; session fields\n(``engaged_arm``, ``anchor_tcp``, ``target_tcp``) are ``None`` otherwise.\n``controller`` echoes the raw controller inputs (``None`` when the backend\nreports no controller) and ``device_held`` the key codes the runtime\ninjects from them (13-tracker \u00a71.1); a stale sample yields an empty list.\n``device_action`` is the last device-sourced discrete action (e.g.\n``\"switch_arm\"``), cleared by the runtime ~1 s after it fired.\n``pose_filtered`` is the aligned pose after the One Euro filter (\u00a74), i.e.\nwhat the anchor/delta math actually consumes; ``None`` when no sample.\n``calibration`` mirrors ``GET /api/tracker/calibration`` (protocol.tracker)\nso the Devices-page wizard follows progress without polling.",
       "properties": {
         "age_s": {
           "anyOf": [
@@ -661,6 +1000,29 @@
           ],
           "title": "Backend",
           "type": "string"
+        },
+        "calibration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrackerCalibrationStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "charging": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Charging"
         },
         "clutch": {
           "default": false,
@@ -861,6 +1223,33 @@
         "state"
       ],
       "title": "TrainerStatus",
+      "type": "object"
+    },
+    "YawGesturePoint": {
+      "description": "One captured point of the yaw gesture.",
+      "properties": {
+        "label": {
+          "enum": [
+            "start",
+            "left",
+            "forward",
+            "right",
+            "back",
+            "up",
+            "down"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "pose": {
+          "$ref": "#/$defs/PoseMsg"
+        }
+      },
+      "required": [
+        "label",
+        "pose"
+      ],
+      "title": "YawGesturePoint",
       "type": "object"
     }
   },

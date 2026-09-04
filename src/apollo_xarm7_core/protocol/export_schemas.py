@@ -17,7 +17,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from apollo_xarm7_core.errors import SchemaExportError
-from apollo_xarm7_core.protocol import control, keymap, session, telemetry
+from apollo_xarm7_core.protocol import control, keymap, session, telemetry, tracker
 from apollo_xarm7_core.schemas.profile import StateProfile
 from apollo_xarm7_core.schemas.safety import CollisionEvent
 
@@ -36,6 +36,10 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "TrackerSettingsArgs": control.TrackerSettingsArgs,
     # telemetry (§11; embeds sub-models incl. TrackerTelemetry via $defs)
     "TelemetryMsg": telemetry.TelemetryMsg,
+    # tracker calibration (§12; REST /api/tracker/calibration — the other
+    # protocol.tracker models ride TelemetryMsg / TrackerCalibrationStatus $defs)
+    "TrackerCalibrationStatus": tracker.TrackerCalibrationStatus,
+    "TrackerCalibrationCommand": tracker.TrackerCalibrationCommand,
     # session (§12)
     "SessionSpec": session.SessionSpec,
     "SessionInfo": session.SessionInfo,

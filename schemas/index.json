@@ -19,6 +19,8 @@
     "SetInitialConditionArgs",
     "StateProfile",
     "TelemetryMsg",
+    "TrackerCalibrationCommand",
+    "TrackerCalibrationStatus",
     "TrackerSettingsArgs",
     "WorkcellStatus"
   ]

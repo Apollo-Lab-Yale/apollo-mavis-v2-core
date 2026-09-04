@@ -48,6 +48,20 @@ from .telemetry import (
     TrackerSettingsMsg,
     TrackerTelemetry,
 )
+
+# Keep ``.telemetry`` above ``.tracker``: tracker reuses PoseMsg and telemetry
+# embeds TrackerCalibrationStatus (telemetry imports tracker once PoseMsg exists).
+from .tracker import (
+    CalibrationKind,
+    CalibrationOp,
+    CalibrationPhase,
+    CalibrationValidation,
+    LighthouseStatus,
+    TrackerCalibrationCommand,
+    TrackerCalibrationStatus,
+    YawGesturePoint,
+    YawPointLabel,
+)
 from .video import (
     HEADER_FMT,
     HEADER_SIZE,
@@ -84,6 +98,16 @@ __all__ = [
     "ControllerTelemetry",
     "TrackerTelemetry",
     "TelemetryMsg",
+    # tracker calibration
+    "CalibrationKind",
+    "CalibrationPhase",
+    "CalibrationOp",
+    "YawPointLabel",
+    "LighthouseStatus",
+    "CalibrationValidation",
+    "YawGesturePoint",
+    "TrackerCalibrationStatus",
+    "TrackerCalibrationCommand",
     # session
     "Mode",
     "START_FROM_RE",
