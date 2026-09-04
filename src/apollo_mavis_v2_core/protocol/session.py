@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, field_validator, model_validator
 
-from apollo_xarm7_core.types import FrameRef, parse_frame
+from apollo_mavis_v2_core.types import FrameRef, parse_frame
 
 Mode = Literal["teleop", "collect", "dagger", "inference"]
 

@@ -1,6 +1,6 @@
 """State-profile models (design doc 01-core §8).
 
-Persisted by :class:`~apollo_xarm7_core.profiles.store.ProfileStore` as one
+Persisted by :class:`~apollo_mavis_v2_core.profiles.store.ProfileStore` as one
 JSON file per profile. Loading a profile is always runtime-side twin-planned
 motion — never xArm native gohome.
 """

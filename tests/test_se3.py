@@ -6,8 +6,8 @@ import numpy as np
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from apollo_xarm7_core import se3
-from apollo_xarm7_core.types import Pose, Twist
+from apollo_mavis_v2_core import se3
+from apollo_mavis_v2_core.types import Pose, Twist
 
 # --- strategies (finite floats, non-degenerate quats) -------------------------
 

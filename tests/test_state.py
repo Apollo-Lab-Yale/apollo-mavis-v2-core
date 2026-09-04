@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from apollo_xarm7_core.errors import CommandError
-from apollo_xarm7_core.state import ArmState, CameraFrame, GripperCommand, GripperState
-from apollo_xarm7_core.types import Pose
+from apollo_mavis_v2_core.errors import CommandError
+from apollo_mavis_v2_core.state import ArmState, CameraFrame, GripperCommand, GripperState
+from apollo_mavis_v2_core.types import Pose
 
 
 def _arm_state(**overrides) -> ArmState:

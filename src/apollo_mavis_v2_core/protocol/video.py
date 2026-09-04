@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import struct
 
-from apollo_xarm7_core.errors import VideoFramingError
+from apollo_mavis_v2_core.errors import VideoFramingError
 
 HEADER_FMT = "<dI"
 HEADER_SIZE = 12

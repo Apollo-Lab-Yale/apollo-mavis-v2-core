@@ -7,7 +7,7 @@ import dataclasses
 import numpy as np
 import pytest
 
-from apollo_xarm7_core.dagger.types import (
+from apollo_mavis_v2_core.dagger.types import (
     CheckpointInfo,
     ControlMode,
     EpisodeSummary,

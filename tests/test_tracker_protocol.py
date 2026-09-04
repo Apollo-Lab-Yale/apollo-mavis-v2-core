@@ -8,10 +8,10 @@ from typing import get_args
 import pytest
 from pydantic import ValidationError
 
-from apollo_xarm7_core.protocol import tracker as tracker_mod
-from apollo_xarm7_core.protocol.export_schemas import EXPORTED_MODELS
-from apollo_xarm7_core.protocol.telemetry import PoseMsg, TrackerTelemetry
-from apollo_xarm7_core.protocol.tracker import (
+from apollo_mavis_v2_core.protocol import tracker as tracker_mod
+from apollo_mavis_v2_core.protocol.export_schemas import EXPORTED_MODELS
+from apollo_mavis_v2_core.protocol.telemetry import PoseMsg, TrackerTelemetry
+from apollo_mavis_v2_core.protocol.tracker import (
     CalibrationKind,
     CalibrationOp,
     CalibrationPhase,
@@ -46,7 +46,7 @@ def test_module_exports_and_schema_registration():
         "TrackerCalibrationStatus", "TrackerCalibrationCommand",
     }
     # Package re-exports every name; REST models are exported top-level (§14).
-    import apollo_xarm7_core.protocol as protocol
+    import apollo_mavis_v2_core.protocol as protocol
 
     for name in tracker_mod.__all__:
         assert getattr(protocol, name) is getattr(tracker_mod, name)

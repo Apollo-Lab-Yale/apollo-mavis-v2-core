@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 
-from apollo_xarm7_core.bus import Command, CommandBus, CommandResult, LatestSlot
+from apollo_mavis_v2_core.bus import Command, CommandBus, CommandResult, LatestSlot
 
 N_PRODUCERS = 8
 CMDS_PER_PRODUCER = 25

@@ -16,10 +16,10 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from apollo_xarm7_core.errors import SchemaExportError
-from apollo_xarm7_core.protocol import control, keymap, session, telemetry, tracker
-from apollo_xarm7_core.schemas.profile import StateProfile
-from apollo_xarm7_core.schemas.safety import CollisionEvent
+from apollo_mavis_v2_core.errors import SchemaExportError
+from apollo_mavis_v2_core.protocol import control, keymap, session, telemetry, tracker
+from apollo_mavis_v2_core.schemas.profile import StateProfile
+from apollo_mavis_v2_core.schemas.safety import CollisionEvent
 
 _REF_TEMPLATE = "#/$defs/{model}"
 _FALLBACK_VERSION = "0.1.0"
@@ -58,7 +58,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
 
 def _core_version() -> str:
     try:
-        return metadata.version("apollo-xarm7-core")
+        return metadata.version("apollo-mavis-v2-core")
     except metadata.PackageNotFoundError:  # pragma: no cover - dev tree fallback
         return _FALLBACK_VERSION
 
@@ -108,7 +108,7 @@ def check(out_dir: Path) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m apollo_xarm7_core.protocol.export_schemas",
+        prog="python -m apollo_mavis_v2_core.protocol.export_schemas",
         description="Export core wire-model JSON Schemas (01-core §14).",
     )
     parser.add_argument("--out", required=True, type=Path, help="output directory")

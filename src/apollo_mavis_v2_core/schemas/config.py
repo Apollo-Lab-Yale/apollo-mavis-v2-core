@@ -2,7 +2,7 @@
 
 Config files (``configs/hardware.yaml``, ``configs/sim.yaml``) live in the
 runtime deployment dir; :func:`load_workcell_config` is the single loader and
-wraps every failure in :class:`~apollo_xarm7_core.errors.ConfigError` carrying
+wraps every failure in :class:`~apollo_mavis_v2_core.errors.ConfigError` carrying
 the file path plus a JSON-pointer-ish location.
 """
 
@@ -21,7 +21,7 @@ from .safety import SafetyConfig
 
 
 class PoseModel(BaseModel):
-    """JSON/YAML-friendly :class:`~apollo_xarm7_core.types.Pose`."""
+    """JSON/YAML-friendly :class:`~apollo_mavis_v2_core.types.Pose`."""
 
     position: tuple[float, float, float] = (0.0, 0.0, 0.0)
     orientation_wxyz: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)

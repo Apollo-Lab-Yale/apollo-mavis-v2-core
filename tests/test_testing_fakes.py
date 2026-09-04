@@ -5,14 +5,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from apollo_xarm7_core.errors import CommandError, RailUnavailableError
-from apollo_xarm7_core.interfaces.arm import ArmInterface
-from apollo_xarm7_core.interfaces.camera import CameraInterface
-from apollo_xarm7_core.interfaces.teleop import HeldState, TeleopInput
-from apollo_xarm7_core.interfaces.workcell import WorkcellInterface
-from apollo_xarm7_core.se3 import RAIL_TRAVEL_M
-from apollo_xarm7_core.state import GripperCommand
-from apollo_xarm7_core.testing import FakeArm, FakeCamera, FakeWorkcell
+from apollo_mavis_v2_core.errors import CommandError, RailUnavailableError
+from apollo_mavis_v2_core.interfaces.arm import ArmInterface
+from apollo_mavis_v2_core.interfaces.camera import CameraInterface
+from apollo_mavis_v2_core.interfaces.teleop import HeldState, TeleopInput
+from apollo_mavis_v2_core.interfaces.workcell import WorkcellInterface
+from apollo_mavis_v2_core.se3 import RAIL_TRAVEL_M
+from apollo_mavis_v2_core.state import GripperCommand
+from apollo_mavis_v2_core.testing import FakeArm, FakeCamera, FakeWorkcell
 
 
 def test_fake_arm_slews_toward_target() -> None:

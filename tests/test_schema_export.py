@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from apollo_xarm7_core.protocol.export_schemas import EXPORTED_MODELS, export, main
+from apollo_mavis_v2_core.protocol.export_schemas import EXPORTED_MODELS, export, main
 
 _EXPECTED_FILES = {f"{name}.json" for name in EXPORTED_MODELS} | {"keymap.json", "index.json"}
 

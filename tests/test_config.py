@@ -9,10 +9,10 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from apollo_xarm7_core.errors import ConfigError
-from apollo_xarm7_core.schemas.config import PoseModel, load_workcell_config
-from apollo_xarm7_core.schemas.safety import CollisionReport, SafetyConfig
-from apollo_xarm7_core.types import Pose
+from apollo_mavis_v2_core.errors import ConfigError
+from apollo_mavis_v2_core.schemas.config import PoseModel, load_workcell_config
+from apollo_mavis_v2_core.schemas.safety import CollisionReport, SafetyConfig
+from apollo_mavis_v2_core.types import Pose
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

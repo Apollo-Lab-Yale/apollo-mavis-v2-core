@@ -7,8 +7,8 @@ import json
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from apollo_xarm7_core.dagger.types import ControlMode, TrainerStatus
-from apollo_xarm7_core.protocol.control import (
+from apollo_mavis_v2_core.dagger.types import ControlMode, TrainerStatus
+from apollo_mavis_v2_core.protocol.control import (
     AckMsg,
     ActionMsg,
     HelloMsg,
@@ -20,7 +20,7 @@ from apollo_xarm7_core.protocol.control import (
     parse_client_msg,
     validate_action_args,
 )
-from apollo_xarm7_core.protocol.session import (
+from apollo_mavis_v2_core.protocol.session import (
     ArmStatusInfo,
     CameraInfo,
     PolicyInfo,
@@ -30,7 +30,7 @@ from apollo_xarm7_core.protocol.session import (
     SessionSpec,
     WorkcellStatus,
 )
-from apollo_xarm7_core.protocol.telemetry import (
+from apollo_mavis_v2_core.protocol.telemetry import (
     ArmTelemetry,
     ClearanceItem,
     ControllerTelemetry,
@@ -43,14 +43,14 @@ from apollo_xarm7_core.protocol.telemetry import (
     TrackerSettingsMsg,
     TrackerTelemetry,
 )
-from apollo_xarm7_core.protocol.tracker import (
+from apollo_mavis_v2_core.protocol.tracker import (
     CalibrationValidation,
     LighthouseStatus,
     TrackerCalibrationCommand,
     TrackerCalibrationStatus,
     YawGesturePoint,
 )
-from apollo_xarm7_core.schemas.safety import CollisionReport
+from apollo_mavis_v2_core.schemas.safety import CollisionReport
 
 _POSE = PoseMsg(position=(0.3, 0.0, 0.4), orientation=(1.0, 0.0, 0.0, 0.0))
 

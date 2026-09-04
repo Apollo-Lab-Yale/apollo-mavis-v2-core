@@ -1,7 +1,7 @@
-"""apollo-xarm7-core: interfaces, schemas, and protocols for the apollo-xarm7 stack.
+"""apollo-mavis-v2-core: interfaces, schemas, and protocols for the apollo-mavis-v2 stack.
 
 Stable public API re-exports (design doc 01-core §2). Wire-protocol models
-live under :mod:`apollo_xarm7_core.protocol` and are imported explicitly.
+live under :mod:`apollo_mavis_v2_core.protocol` and are imported explicitly.
 """
 
 from . import se3

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 
 class ApolloError(Exception):
-    """Base class for every exception raised by the apollo-xarm7 stack."""
+    """Base class for every exception raised by the apollo-mavis-v2 stack."""
 
 
 class ConfigError(ApolloError):

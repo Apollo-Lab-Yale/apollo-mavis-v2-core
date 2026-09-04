@@ -6,8 +6,8 @@ import struct
 
 import pytest
 
-from apollo_xarm7_core.errors import VideoFramingError
-from apollo_xarm7_core.protocol.video import (
+from apollo_mavis_v2_core.errors import VideoFramingError
+from apollo_mavis_v2_core.protocol.video import (
     HEADER_FMT,
     HEADER_SIZE,
     RESERVED_STREAM_IDS,

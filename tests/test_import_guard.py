@@ -15,8 +15,8 @@ import sys
 import time
 
 t0 = time.perf_counter()
-import apollo_xarm7_core  # noqa: F401
-for name in ("apollo_xarm7_core.protocol", "apollo_xarm7_core.dagger.types"):
+import apollo_mavis_v2_core  # noqa: F401
+for name in ("apollo_mavis_v2_core.protocol", "apollo_mavis_v2_core.dagger.types"):
     if importlib.util.find_spec(name) is not None:
         __import__(name)
 elapsed = time.perf_counter() - t0

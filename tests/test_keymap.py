@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import typing
 
-from apollo_xarm7_core.protocol.control import ActionName
-from apollo_xarm7_core.protocol.keymap import (
+from apollo_mavis_v2_core.protocol.control import ActionName
+from apollo_mavis_v2_core.protocol.keymap import (
     DISCRETE_CODES,
     HELD_CODES,
     HELD_MODIFIER_ACTIONS,

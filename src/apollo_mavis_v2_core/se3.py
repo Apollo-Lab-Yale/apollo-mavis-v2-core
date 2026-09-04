@@ -116,7 +116,7 @@ def mat_to_quat(m: np.ndarray) -> Quat:
 def rpy_to_quat(rpy) -> Quat:
     """xArm SDK RPY (intrinsic XYZ: R = Rx(roll) @ Ry(pitch) @ Rz(yaw)) -> quat.
 
-    Only ``apollo_xarm7_hardware.units`` should call this; verify against a
+    Only ``apollo_mavis_v2_hardware.units`` should call this; verify against a
     known controller pose during hardware bring-up (02-hardware §2).
     """
     r, p, y = (float(v) for v in rpy)

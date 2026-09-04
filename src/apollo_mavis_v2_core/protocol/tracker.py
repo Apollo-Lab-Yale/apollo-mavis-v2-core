@@ -21,7 +21,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from apollo_xarm7_core.protocol.telemetry import PoseMsg
+from apollo_mavis_v2_core.protocol.telemetry import PoseMsg
 
 CalibrationKind = Literal["none", "base_station", "yaw"]
 CalibrationPhase = Literal[

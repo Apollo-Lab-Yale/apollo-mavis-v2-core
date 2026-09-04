@@ -10,8 +10,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from apollo_xarm7_core.dagger.types import ControlMode, TrainerStatus
-from apollo_xarm7_core.schemas.safety import CollisionReport
+from apollo_mavis_v2_core.dagger.types import ControlMode, TrainerStatus
+from apollo_mavis_v2_core.schemas.safety import CollisionReport
 
 
 class PoseMsg(BaseModel):
@@ -24,7 +24,7 @@ class PoseMsg(BaseModel):
 # ``protocol.tracker`` builds on PoseMsg and TrackerTelemetry (below) embeds its
 # status model, so the import must follow PoseMsg to keep the cycle importable;
 # the package ``__init__`` loads this module before ``tracker``.
-from apollo_xarm7_core.protocol.tracker import TrackerCalibrationStatus  # noqa: E402
+from apollo_mavis_v2_core.protocol.tracker import TrackerCalibrationStatus  # noqa: E402
 
 
 class ArmTelemetry(BaseModel):

@@ -1,6 +1,6 @@
 """Arm implementation facade (design doc 01-core §5.1).
 
-Implemented by ``apollo_xarm7_hardware`` (xArm SDK) and ``apollo_xarm7_sim``
+Implemented by ``apollo_mavis_v2_hardware`` (xArm SDK) and ``apollo_mavis_v2_sim``
 (MuJoCo); consumed by the runtime control loop, which treats both identically
 (spine §3.3).
 """

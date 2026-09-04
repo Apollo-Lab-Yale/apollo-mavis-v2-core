@@ -7,10 +7,10 @@ import os
 
 import pytest
 
-from apollo_xarm7_core.errors import ProfileError, ProfileNotFoundError
-from apollo_xarm7_core.profiles import store as store_mod
-from apollo_xarm7_core.profiles.store import ProfileStore
-from apollo_xarm7_core.schemas.profile import ArmPosture, StateProfile
+from apollo_mavis_v2_core.errors import ProfileError, ProfileNotFoundError
+from apollo_mavis_v2_core.profiles import store as store_mod
+from apollo_mavis_v2_core.profiles.store import ProfileStore
+from apollo_mavis_v2_core.schemas.profile import ArmPosture, StateProfile
 
 
 def _profile(name: str = "home", kind: str = "sim", **kw) -> StateProfile:
