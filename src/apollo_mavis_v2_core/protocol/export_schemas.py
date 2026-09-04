@@ -17,7 +17,14 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from apollo_mavis_v2_core.errors import SchemaExportError
-from apollo_mavis_v2_core.protocol import control, keymap, session, telemetry, tracker
+from apollo_mavis_v2_core.protocol import (
+    control,
+    keymap,
+    microphone,
+    session,
+    telemetry,
+    tracker,
+)
 from apollo_mavis_v2_core.schemas.profile import StateProfile
 from apollo_mavis_v2_core.schemas.safety import CollisionEvent
 
@@ -34,7 +41,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "SaveProfileArgs": control.SaveProfileArgs,
     "SetInitialConditionArgs": control.SetInitialConditionArgs,
     "TrackerSettingsArgs": control.TrackerSettingsArgs,
-    # telemetry (§11; embeds sub-models incl. TrackerTelemetry via $defs)
+    # telemetry (§11; embeds sub-models incl. TrackerTelemetry and
+    # MicrophoneTelemetry via $defs)
     "TelemetryMsg": telemetry.TelemetryMsg,
     # tracker calibration (§12; REST /api/tracker/calibration — the other
     # protocol.tracker models ride TelemetryMsg / TrackerCalibrationStatus $defs)
@@ -49,6 +57,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "SceneInfo": session.SceneInfo,
     "ProfileInfo": session.ProfileInfo,
     "PolicyInfo": session.PolicyInfo,
+    # microphone (§12; REST /api/microphones — phase-11)
+    "MicrophoneInfo": microphone.MicrophoneInfo,
     # misc (§8, §13, §6)
     "StateProfile": StateProfile,
     "KeymapEntry": keymap.KeymapEntry,

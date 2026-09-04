@@ -247,6 +247,115 @@ def test_exported_models_cover_spec_sections():
         # session
         "SessionSpec", "SessionInfo", "WorkcellStatus", "ArmStatusInfo",
         "CameraInfo", "SceneInfo", "ProfileInfo", "PolicyInfo",
+        # microphone (REST /api/microphones; phase-11)
+        "MicrophoneInfo",
         # misc
         "StateProfile", "KeymapEntry", "CollisionEvent",
     }
+
+
+def test_telemetry_schema_embeds_microphone_block(tmp_path):
+    """phase-11: MicrophoneTelemetry rides TelemetryMsg's $defs; every field defaults."""
+    out = tmp_path / "schemas"
+    export(out)
+    telemetry = json.loads((out / "TelemetryMsg.json").read_text())
+    assert "MicrophoneTelemetry" in telemetry["$defs"]
+    microphone = telemetry["properties"]["microphone"]
+    assert {"$ref": "#/$defs/MicrophoneTelemetry"} in microphone["anyOf"]
+    assert {"type": "null"} in microphone["anyOf"]
+    assert microphone["default"] is None
+    assert "microphone" not in telemetry["required"]
+    # Additive: the block sits after ``tracker`` in the model (schema keys are sorted).
+    assert {"session", "tracker", "microphone"} <= set(telemetry["properties"])
+    mic = telemetry["$defs"]["MicrophoneTelemetry"]
+    assert set(mic["properties"]) == {
+        "mic_id", "status", "detail", "seq", "age_s", "rate_hz", "sample_rate",
+        "rms_dbfs", "peak_dbfs", "clipping", "env_min", "env_max", "overruns",
+    }
+    assert "required" not in mic  # every field defaults (no-microphone producers validate)
+    assert mic["properties"]["mic_id"] == {
+        "type": "string", "default": "mic_view", "title": "Mic Id",
+    }
+    assert mic["properties"]["status"] == {
+        "type": "string",
+        "enum": ["no_backend", "starting", "absent", "live", "stalled", "error"],
+        "default": "no_backend",
+        "title": "Status",
+    }
+    assert mic["properties"]["sample_rate"] == {
+        "type": "integer", "default": 48000, "title": "Sample Rate",
+    }
+    assert mic["properties"]["clipping"] == {
+        "type": "boolean", "default": False, "title": "Clipping",
+    }
+    assert mic["properties"]["overruns"] == {
+        "type": "integer", "default": 0, "title": "Overruns",
+    }
+    for key in ("env_min", "env_max"):
+        env = mic["properties"][key]
+        assert env["type"] == "array" and env["items"] == {"type": "integer"}, key
+        assert env["default"] == [], key
+    for key in ("age_s", "rms_dbfs", "peak_dbfs"):
+        prop = mic["properties"][key]
+        assert {"type": "number"} in prop["anyOf"] and {"type": "null"} in prop["anyOf"], key
+        assert prop["default"] is None, key
+
+
+def test_microphone_info_schema(tmp_path):
+    """phase-11: GET /api/microphones row exports top-level as a flat body."""
+    out = tmp_path / "schemas"
+    export(out)
+    info = json.loads((out / "MicrophoneInfo.json").read_text())
+    assert set(info["properties"]) == {
+        "mic_id", "label", "kind", "source", "sample_rate", "channels", "live", "status",
+        "detail",
+    }
+    assert set(info["required"]) == {
+        "mic_id", "label", "kind", "source", "sample_rate", "live", "status",
+    }
+    assert info["properties"]["kind"] == {
+        "type": "string", "enum": ["pulse", "fake", "none"], "title": "Kind",
+    }
+    assert info["properties"]["status"] == {
+        "type": "string",
+        "enum": ["no_backend", "starting", "absent", "live", "stalled", "error"],
+        "title": "Status",
+    }
+    source = info["properties"]["source"]
+    assert {"type": "string"} in source["anyOf"] and {"type": "null"} in source["anyOf"]
+    assert info["properties"]["channels"] == {
+        "type": "integer", "default": 1, "title": "Channels",
+    }
+    assert info["properties"]["detail"] == {"type": "string", "default": "", "title": "Detail"}
+    assert "$defs" not in info  # flat body
+    index = json.loads((out / "index.json").read_text())
+    assert "MicrophoneInfo" in index["models"]
+
+
+def test_workcell_schemas_gain_phase11_fields(tmp_path):
+    """phase-11: ArmStatusInfo.reachable / WorkcellStatus.hardware_ready are additive."""
+    out = tmp_path / "schemas"
+    export(out)
+    arm = json.loads((out / "ArmStatusInfo.json").read_text())
+    assert set(arm["properties"]) == {
+        "arm_id", "ip", "connected", "reachable", "has_rail", "gripper",
+        "gripper_force_capable", "error_code", "joint_limits",
+    }
+    assert "reachable" not in arm["required"]
+    assert arm["properties"]["reachable"] == {
+        "type": "string",
+        "enum": ["open", "refused", "unreachable", "unknown"],
+        "default": "unknown",
+        "title": "Reachable",
+    }
+    assert arm["properties"]["connected"] == {"type": "boolean", "title": "Connected"}
+    workcell = json.loads((out / "WorkcellStatus.json").read_text())
+    assert set(workcell["properties"]) == {
+        "kind", "available_kinds", "arms", "cameras", "policies_available", "hardware_ready",
+    }
+    assert set(workcell["required"]) == {"kind", "available_kinds", "arms", "cameras"}
+    assert workcell["properties"]["hardware_ready"] == {
+        "type": "boolean", "default": False, "title": "Hardware Ready",
+    }
+    # The nested arm rows carry the probe field too (same $defs class).
+    assert "reachable" in workcell["$defs"]["ArmStatusInfo"]["properties"]

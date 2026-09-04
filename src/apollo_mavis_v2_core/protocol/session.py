@@ -70,7 +70,11 @@ class ArmStatusInfo(BaseModel):
 
     arm_id: str
     ip: str | None
-    connected: bool
+    connected: bool  # "a session exists" (semantics unchanged; phase-11 note)
+    reachable: Literal["open", "refused", "unreachable", "unknown"] = "unknown"
+    # hardware probe (TCP 502 connect-and-close): open = box up / refused = box
+    #   booting / unreachable = no route or timeout / unknown = not probed (sim);
+    #   additive (phase-11)
     has_rail: bool
     gripper: Literal["xarm", "xarm_g2", "none"]
     gripper_force_capable: bool
@@ -97,6 +101,8 @@ class WorkcellStatus(BaseModel):
     arms: list[ArmStatusInfo]
     cameras: list[CameraInfo]
     policies_available: bool = False  # enables DAgger/Inference launch (05-ui §8.1)
+    hardware_ready: bool = False  # every configured hardware arm reachable == "open"
+    #   (gates the Hardware-tab mode launchers; additive, phase-11)
 
 
 class SceneInfo(BaseModel):

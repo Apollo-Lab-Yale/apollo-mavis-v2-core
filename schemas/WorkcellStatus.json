@@ -59,6 +59,17 @@
           },
           "title": "Joint Limits",
           "type": "array"
+        },
+        "reachable": {
+          "default": "unknown",
+          "enum": [
+            "open",
+            "refused",
+            "unreachable",
+            "unknown"
+          ],
+          "title": "Reachable",
+          "type": "string"
         }
       },
       "required": [
@@ -155,6 +166,11 @@
       },
       "title": "Cameras",
       "type": "array"
+    },
+    "hardware_ready": {
+      "default": false,
+      "title": "Hardware Ready",
+      "type": "boolean"
     },
     "kind": {
       "enum": [

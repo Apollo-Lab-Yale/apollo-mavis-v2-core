@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import get_args
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -20,6 +21,7 @@ from apollo_mavis_v2_core.protocol.control import (
     parse_client_msg,
     validate_action_args,
 )
+from apollo_mavis_v2_core.protocol.microphone import MicrophoneInfo, MicStatus
 from apollo_mavis_v2_core.protocol.session import (
     ArmStatusInfo,
     CameraInfo,
@@ -37,6 +39,7 @@ from apollo_mavis_v2_core.protocol.telemetry import (
     DaggerStatus,
     EpisodeStatus,
     InferenceStatus,
+    MicrophoneTelemetry,
     PoseMsg,
     SessionTelemetry,
     TelemetryMsg,
@@ -190,6 +193,46 @@ _CALIB_YAW_FAILED_FIT = TrackerCalibrationStatus(
     fit_checks=["leg left too short (0.04 m < 0.10 m)", "residual 22.3 deg > 15.0 deg"],
 )
 
+# phase-11 microphone blocks: no backend (all defaults) and a live RØDE frame with
+# a full 64-bin int8 envelope (-127..127, time-ordered).
+_ENV_MIN = [-(2 * i) for i in range(64)]  # 0 .. -126
+_ENV_MAX = [2 * i for i in range(64)]  # 0 .. 126
+_MIC_IDLE = MicrophoneTelemetry()
+_MIC_LIVE = MicrophoneTelemetry(
+    mic_id="mic_view",
+    status="live",
+    seq=4321,
+    age_s=0.012,
+    rate_hz=25.0,
+    sample_rate=48000,
+    rms_dbfs=-31.7,
+    peak_dbfs=-0.4,
+    clipping=True,
+    env_min=_ENV_MIN,
+    env_max=_ENV_MAX,
+    overruns=2,
+)
+_MIC_INFO_LIVE = MicrophoneInfo(
+    mic_id="mic_view",
+    label="RØDE NT-USB Mini",
+    kind="pulse",
+    source="alsa_input.usb-R__DE_Microphones_R__DE_NT-USB_Mini_750BFEE8-00.mono-fallback",
+    sample_rate=48000,
+    channels=1,
+    live=True,
+    status="live",
+)
+_MIC_INFO_ABSENT = MicrophoneInfo(
+    mic_id="mic_view",
+    label="View arm microphone",
+    kind="none",
+    source=None,
+    sample_rate=48000,
+    live=False,
+    status="absent",
+    detail="no PulseAudio source matches 'NT-USB Mini'",
+)
+
 _WIRE_MODELS: list[BaseModel] = [
     HelloMsg(epoch="ep0", session_id="s0", role="controller"),
     HelloMsg(epoch="ep0", session_id=None, role="observer"),
@@ -256,6 +299,16 @@ _WIRE_MODELS: list[BaseModel] = [
     _TRACKER_ENGAGED.model_copy(update={"clutch": False, "calibration": _CALIB_BASE_STATION}),
     _TRACKER_IDLE.model_copy(update={"backend": "fake", "status": "tracking",
                                      "calibration": _CALIB_YAW}),
+    # phase-11 microphone (TelemetryMsg.microphone + GET /api/microphones)
+    _MIC_IDLE,
+    _MIC_LIVE,
+    MicrophoneTelemetry(status="stalled", seq=17, age_s=1.3, rate_hz=0.0,
+                        rms_dbfs=-60.0, peak_dbfs=-48.2),
+    MicrophoneTelemetry(status="error", detail="PortAudio: device unavailable (EBUSY)"),
+    _MIC_INFO_LIVE,
+    _MIC_INFO_ABSENT,
+    MicrophoneInfo(mic_id="mic_view", label="View arm microphone", kind="fake", source=None,
+                   sample_rate=48000, live=True, status="live"),
     TelemetryMsg(
         seq=1,
         ts=12.0,
@@ -270,6 +323,7 @@ _WIRE_MODELS: list[BaseModel] = [
         inference=None,
         session=SessionTelemetry(state="RUNNING"),
         tracker=_TRACKER_ENGAGED,
+        microphone=_MIC_LIVE,
     ),
     SessionSpec(
         mode="collect",
@@ -293,10 +347,29 @@ _WIRE_MODELS: list[BaseModel] = [
         error_code=0,
         joint_limits=[(-3.1, 3.1)] * 7 + [(0.0, 0.65)],
     ),
+    # phase-11: hardware arm rows carry the probe result; no session yet.
+    ArmStatusInfo(
+        arm_id="view", ip="192.168.1.186", connected=False, reachable="refused",
+        has_rail=True, gripper="none", gripper_force_capable=False, error_code=0,
+        joint_limits=[(-3.1, 3.1)] * 7 + [(0.0, 0.65)],
+    ),
     CameraInfo(
         camera_id="cam0", kind="v4l2", label="wrist 0", resolution=(640, 480), fps=30, live=True
     ),
+    CameraInfo(
+        camera_id="camera1", kind="v4l2", label="camera1", resolution=(640, 480), fps=30,
+        live=False,  # configured, not attached (Hardware tab draws a black tile)
+    ),
     WorkcellStatus(kind="sim", available_kinds=["sim"], arms=[], cameras=[]),
+    WorkcellStatus(
+        kind="hardware", available_kinds=["hardware", "sim"],
+        arms=[ArmStatusInfo(
+            arm_id="grip", ip="192.168.1.185", connected=False, reachable="open",
+            has_rail=True, gripper="xarm", gripper_force_capable=True, error_code=0,
+            joint_limits=[(-3.1, 3.1)] * 7 + [(0.0, 0.65)],
+        )],
+        cameras=[], policies_available=False, hardware_ready=True,
+    ),
     SceneInfo(
         scene_id="two_arm_table", label="Two-arm table", num_arms=2,
         rail_flags=[True, False], cameras=["cam0"], kind="sim",
@@ -472,6 +545,126 @@ def test_tracker_telemetry_charging_and_calibration_fields_are_additive():
     parsed_frame = TelemetryMsg.model_validate_json(frame.model_dump_json())
     assert parsed_frame.tracker is not None
     assert parsed_frame.tracker.calibration == _CALIB_BASE_STATION
+
+
+def test_microphone_telemetry_fields_pinned_and_defaulted():
+    """phase-11: every MicrophoneTelemetry field defaults; MicStatus is shared with REST."""
+    assert set(MicrophoneTelemetry.model_fields) == {
+        "mic_id", "status", "detail", "seq", "age_s", "rate_hz", "sample_rate",
+        "rms_dbfs", "peak_dbfs", "clipping", "env_min", "env_max", "overruns",
+    }
+    assert all(not f.is_required() for f in MicrophoneTelemetry.model_fields.values())
+    idle = MicrophoneTelemetry()
+    assert idle.mic_id == "mic_view" and idle.status == "no_backend" and idle.detail == ""
+    assert (idle.seq, idle.age_s, idle.rate_hz, idle.sample_rate) == (0, None, 0.0, 48000)
+    assert (idle.rms_dbfs, idle.peak_dbfs, idle.clipping) == (None, None, False)
+    assert idle.env_min == [] and idle.env_max == [] and idle.overruns == 0
+    # Mutable list defaults are per-instance (pydantic copies them).
+    other = MicrophoneTelemetry()
+    idle.env_min.append(1)
+    assert other.env_min == []
+    # One MicStatus vocabulary for the telemetry block and the REST row.
+    assert get_args(MicStatus) == (
+        "no_backend", "starting", "absent", "live", "stalled", "error",
+    )
+    assert MicrophoneTelemetry.model_fields["status"].annotation == MicStatus
+    assert MicrophoneInfo.model_fields["status"].annotation == MicStatus
+    with pytest.raises(ValidationError):
+        MicrophoneTelemetry(status="tracking")  # tracker vocabulary, not MicStatus
+    with pytest.raises(ValidationError):
+        MicrophoneTelemetry(env_min=[0.5] * 64)  # int8 envelope, not floats
+    # Wire form: 64-bin envelope survives as plain integer arrays.
+    wire = json.loads(_MIC_LIVE.model_dump_json())
+    assert len(wire["env_min"]) == len(wire["env_max"]) == 64
+    assert min(wire["env_min"]) >= -127 and max(wire["env_max"]) <= 127
+    assert wire["clipping"] is True and wire["peak_dbfs"] == -0.4
+    assert MicrophoneTelemetry.model_validate(wire) == _MIC_LIVE
+
+
+def test_telemetry_microphone_block_is_additive():
+    """Pre-phase-11 producers (no ``microphone`` key) still parse; block rides the frame."""
+    frame = TelemetryMsg(
+        seq=3, ts=14.0, epoch="ep0", active_arm=None, controller_connected=False,
+        arms=[], collision=CollisionReport.ok(), clearances=[],
+        episode=None, dagger=None, inference=None, microphone=_MIC_LIVE,
+    )
+    assert list(TelemetryMsg.model_fields)[-3:] == ["session", "tracker", "microphone"]
+    assert TelemetryMsg.model_fields["microphone"].default is None
+    legacy = frame.model_dump(mode="json")
+    legacy.pop("microphone")
+    parsed = TelemetryMsg.model_validate(legacy)
+    assert parsed.microphone is None
+    wire = json.loads(frame.model_dump_json())
+    assert wire["microphone"]["status"] == "live" and wire["microphone"]["seq"] == 4321
+    assert wire["microphone"]["env_max"][-1] == 126
+    assert TelemetryMsg.model_validate(wire) == frame
+    # A frame without a device still carries the defaulted block when the runtime sends one.
+    bare = frame.model_copy(update={"microphone": MicrophoneTelemetry()})
+    assert json.loads(bare.model_dump_json())["microphone"]["status"] == "no_backend"
+
+
+def test_microphone_info_fields_pinned():
+    """phase-11: GET /api/microphones row, spelled exactly."""
+    assert set(MicrophoneInfo.model_fields) == {
+        "mic_id", "label", "kind", "source", "sample_rate", "channels", "live", "status",
+        "detail",
+    }
+    required = {n for n, f in MicrophoneInfo.model_fields.items() if f.is_required()}
+    assert required == {"mic_id", "label", "kind", "source", "sample_rate", "live", "status"}
+    assert MicrophoneInfo.model_fields["channels"].default == 1
+    assert MicrophoneInfo.model_fields["detail"].default == ""
+    assert _MIC_INFO_ABSENT.channels == 1 and _MIC_INFO_ABSENT.source is None
+    wire = json.loads(_MIC_INFO_LIVE.model_dump_json())
+    assert wire["kind"] == "pulse" and wire["live"] is True and wire["status"] == "live"
+    assert wire["source"].startswith("alsa_input.usb-R__DE_Microphones")
+    assert MicrophoneInfo.model_validate(wire) == _MIC_INFO_LIVE
+    with pytest.raises(ValidationError):
+        MicrophoneInfo.model_validate({**wire, "kind": "alsa"})  # hw: route is banned
+    with pytest.raises(ValidationError):
+        MicrophoneInfo.model_validate({**wire, "status": "tracking"})
+    with pytest.raises(ValidationError):
+        MicrophoneInfo.model_validate({k: v for k, v in wire.items() if k != "source"})
+
+
+def test_workcell_status_phase11_fields_are_additive():
+    """phase-11: ``reachable`` / ``hardware_ready`` default for pre-probe producers."""
+    assert set(ArmStatusInfo.model_fields) == {
+        "arm_id", "ip", "connected", "reachable", "has_rail", "gripper",
+        "gripper_force_capable", "error_code", "joint_limits",
+    }
+    assert set(WorkcellStatus.model_fields) == {
+        "kind", "available_kinds", "arms", "cameras", "policies_available", "hardware_ready",
+    }
+    assert ArmStatusInfo.model_fields["reachable"].default == "unknown"
+    assert WorkcellStatus.model_fields["hardware_ready"].default is False
+    arm = ArmStatusInfo(
+        arm_id="grip", ip="192.168.1.185", connected=False, reachable="unreachable",
+        has_rail=True, gripper="xarm", gripper_force_capable=True, error_code=0,
+        joint_limits=[(-3.1, 3.1)] * 7 + [(0.0, 0.65)],
+    )
+    legacy_arm = arm.model_dump(mode="json")
+    legacy_arm.pop("reachable")
+    assert ArmStatusInfo.model_validate(legacy_arm).reachable == "unknown"
+    status = WorkcellStatus(
+        kind="hardware", available_kinds=["hardware", "sim"], arms=[arm], cameras=[],
+    )
+    assert status.hardware_ready is False  # default: nothing probed open yet
+    legacy = status.model_dump(mode="json")
+    legacy.pop("hardware_ready")
+    legacy["arms"][0].pop("reachable")
+    parsed = WorkcellStatus.model_validate(legacy)
+    assert parsed.hardware_ready is False and parsed.arms[0].reachable == "unknown"
+    # ``connected`` keeps its "a session exists" meaning next to the probe result.
+    ready = status.model_copy(update={
+        "arms": [arm.model_copy(update={"reachable": "open"})], "hardware_ready": True,
+    })
+    wire = json.loads(ready.model_dump_json())
+    assert wire["hardware_ready"] is True
+    assert wire["arms"][0]["reachable"] == "open" and wire["arms"][0]["connected"] is False
+    assert WorkcellStatus.model_validate(wire) == ready
+    for bad in ("booting", "OPEN", ""):
+        with pytest.raises(ValidationError):
+            ArmStatusInfo.model_validate({**legacy_arm, "reachable": bad})
 
 
 def test_tracker_calibration_model_fields_pinned():

@@ -52,6 +52,9 @@ class ArmConfig(BaseModel):
     gripper: Literal["xarm", "xarm_g2", "none"] = "xarm"
     tcp_load_kg: float = 0.82  # -> set_tcp_load (L3 collision detection)
     tcp_load_cog_mm: tuple[float, float, float] = (0.0, 0.0, 48.0)
+    microphone: bool = False  # microphone body mounted ahead of the wrist camera
+    #   (view arm of the hardware workcell) -> digital twin adds the collision
+    #   body (03-sim §4); additive, phase-11
 
 
 class CameraIntrinsics(BaseModel):

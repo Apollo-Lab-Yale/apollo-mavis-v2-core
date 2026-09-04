@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from apollo_mavis_v2_core.dagger.types import ControlMode, TrainerStatus
+from apollo_mavis_v2_core.protocol.microphone import MicStatus
 from apollo_mavis_v2_core.schemas.safety import CollisionReport
 
 
@@ -165,6 +166,34 @@ class TrackerTelemetry(BaseModel):
     calibration: TrackerCalibrationStatus | None = None  # additive (phase-10 wizard)
 
 
+class MicrophoneTelemetry(BaseModel):
+    """Microphone block (phase-11; 04-runtime §13.3), additive.
+
+    Every field defaults so a producer without a microphone still validates.
+    One frame per telemetry tick (frame length = ``sample_rate / telemetry_hz``,
+    1920 samples at 48 kHz / 25 Hz); the UI de-duplicates on ``seq``.
+    ``env_min``/``env_max`` are the per-bin min/max envelope of the frame as 64
+    int8 values (-127..127, time-ordered) for the scrolling oscilloscope;
+    ``rms_dbfs``/``peak_dbfs`` are full-scale levels (0 dBFS = |1.0|), ``None``
+    when no frame has arrived. ``status`` shares ``MicStatus`` with
+    ``MicrophoneInfo`` (§12).
+    """
+
+    mic_id: str = "mic_view"
+    status: MicStatus = "no_backend"
+    detail: str = ""  # human-readable reason for absent/error/no_backend
+    seq: int = 0  # last frame sequence number
+    age_s: float | None = None  # now - rx_mono of the last frame
+    rate_hz: float = 0.0  # measured frame rate
+    sample_rate: int = 48000  # Hz
+    rms_dbfs: float | None = None  # frame RMS level
+    peak_dbfs: float | None = None  # frame peak level
+    clipping: bool = False  # peak >= -1 dBFS
+    env_min: list[int] = []  # 64 x int8 (-127..127), time-ordered per-bin minimum
+    env_max: list[int] = []  # 64 x int8 (-127..127), time-ordered per-bin maximum
+    overruns: int = 0  # backend overrun / dropped-block count since start
+
+
 class TelemetryMsg(BaseModel):
     """One 25 Hz telemetry frame."""
 
@@ -182,6 +211,7 @@ class TelemetryMsg(BaseModel):
     inference: InferenceStatus | None  # None outside inference
     session: SessionTelemetry | None = None  # additive
     tracker: TrackerTelemetry | None = None  # additive (13-tracker §3.5)
+    microphone: MicrophoneTelemetry | None = None  # additive (phase-11)
 
 
 __all__ = [
@@ -195,5 +225,6 @@ __all__ = [
     "TrackerSettingsMsg",
     "ControllerTelemetry",
     "TrackerTelemetry",
+    "MicrophoneTelemetry",
     "TelemetryMsg",
 ]

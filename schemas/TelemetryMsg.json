@@ -603,6 +603,113 @@
       "title": "LighthouseStatus",
       "type": "object"
     },
+    "MicrophoneTelemetry": {
+      "description": "Microphone block (phase-11; 04-runtime \u00a713.3), additive.\n\nEvery field defaults so a producer without a microphone still validates.\nOne frame per telemetry tick (frame length = ``sample_rate / telemetry_hz``,\n1920 samples at 48 kHz / 25 Hz); the UI de-duplicates on ``seq``.\n``env_min``/``env_max`` are the per-bin min/max envelope of the frame as 64\nint8 values (-127..127, time-ordered) for the scrolling oscilloscope;\n``rms_dbfs``/``peak_dbfs`` are full-scale levels (0 dBFS = |1.0|), ``None``\nwhen no frame has arrived. ``status`` shares ``MicStatus`` with\n``MicrophoneInfo`` (\u00a712).",
+      "properties": {
+        "age_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Age S"
+        },
+        "clipping": {
+          "default": false,
+          "title": "Clipping",
+          "type": "boolean"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "env_max": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Env Max",
+          "type": "array"
+        },
+        "env_min": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Env Min",
+          "type": "array"
+        },
+        "mic_id": {
+          "default": "mic_view",
+          "title": "Mic Id",
+          "type": "string"
+        },
+        "overruns": {
+          "default": 0,
+          "title": "Overruns",
+          "type": "integer"
+        },
+        "peak_dbfs": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Peak Dbfs"
+        },
+        "rate_hz": {
+          "default": 0.0,
+          "title": "Rate Hz",
+          "type": "number"
+        },
+        "rms_dbfs": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rms Dbfs"
+        },
+        "sample_rate": {
+          "default": 48000,
+          "title": "Sample Rate",
+          "type": "integer"
+        },
+        "seq": {
+          "default": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "status": {
+          "default": "no_backend",
+          "enum": [
+            "no_backend",
+            "starting",
+            "absent",
+            "live",
+            "stalled",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "title": "MicrophoneTelemetry",
+      "type": "object"
+    },
     "PoseMsg": {
       "description": "Wire pose: position in m, orientation as wxyz unit quaternion.",
       "properties": {
@@ -1320,6 +1427,17 @@
           "type": "null"
         }
       ]
+    },
+    "microphone": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MicrophoneTelemetry"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "seq": {
       "title": "Seq",

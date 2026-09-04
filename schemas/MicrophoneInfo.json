@@ -1,0 +1,74 @@
+{
+  "description": "GET /api/microphones row (R\u00d8DE NT-USB Mini on the view arm, 05-ui \u00a78.1).",
+  "properties": {
+    "channels": {
+      "default": 1,
+      "title": "Channels",
+      "type": "integer"
+    },
+    "detail": {
+      "default": "",
+      "title": "Detail",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "pulse",
+        "fake",
+        "none"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "live": {
+      "title": "Live",
+      "type": "boolean"
+    },
+    "mic_id": {
+      "title": "Mic Id",
+      "type": "string"
+    },
+    "sample_rate": {
+      "title": "Sample Rate",
+      "type": "integer"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Source"
+    },
+    "status": {
+      "enum": [
+        "no_backend",
+        "starting",
+        "absent",
+        "live",
+        "stalled",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "mic_id",
+    "label",
+    "kind",
+    "source",
+    "sample_rate",
+    "live",
+    "status"
+  ],
+  "title": "MicrophoneInfo",
+  "type": "object"
+}

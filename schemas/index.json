@@ -10,6 +10,7 @@
     "JointTargetArgs",
     "KeymapEntry",
     "KeysMsg",
+    "MicrophoneInfo",
     "PolicyInfo",
     "ProfileInfo",
     "SaveProfileArgs",

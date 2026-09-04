@@ -57,6 +57,17 @@
       },
       "title": "Joint Limits",
       "type": "array"
+    },
+    "reachable": {
+      "default": "unknown",
+      "enum": [
+        "open",
+        "refused",
+        "unreachable",
+        "unknown"
+      ],
+      "title": "Reachable",
+      "type": "string"
     }
   },
   "required": [

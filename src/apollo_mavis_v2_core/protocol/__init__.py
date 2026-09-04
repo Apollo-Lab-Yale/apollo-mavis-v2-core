@@ -23,6 +23,7 @@ from .keymap import (
     KeymapEntry,
     axis_map,
 )
+from .microphone import MicrophoneInfo, MicStatus
 from .session import (
     START_FROM_RE,
     ArmStatusInfo,
@@ -42,6 +43,7 @@ from .telemetry import (
     DaggerStatus,
     EpisodeStatus,
     InferenceStatus,
+    MicrophoneTelemetry,
     PoseMsg,
     SessionTelemetry,
     TelemetryMsg,
@@ -97,6 +99,7 @@ __all__ = [
     "TrackerSettingsMsg",
     "ControllerTelemetry",
     "TrackerTelemetry",
+    "MicrophoneTelemetry",
     "TelemetryMsg",
     # tracker calibration
     "CalibrationKind",
@@ -119,6 +122,9 @@ __all__ = [
     "SceneInfo",
     "ProfileInfo",
     "PolicyInfo",
+    # microphone (phase-11)
+    "MicStatus",
+    "MicrophoneInfo",
     # video
     "HEADER_FMT",
     "HEADER_SIZE",

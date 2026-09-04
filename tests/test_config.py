@@ -62,6 +62,28 @@ def test_hardware_3arm_4cam_fixture_loads():
     assert cfg.safety.allowed_pairs_extra == [("arm0/link7", "arm1/link7")]
 
 
+def test_arm_config_microphone_flag_is_additive(tmp_path):
+    """phase-11 (§7): ``ArmConfig.microphone`` defaults False; the view arm may set it."""
+    data = _hardware_dict()
+    for arm in load_workcell_config_from_dict(tmp_path, data).arms:
+        assert arm.microphone is False  # absent key -> default
+    data["arms"][1].update({"id": "view", "gripper": "none", "microphone": True})
+    cfg = load_workcell_config_from_dict(tmp_path, data)
+    assert [a.microphone for a in cfg.arms] == [False, True]
+    assert cfg.arms[1].gripper == "none"
+    # YAML truthiness is parsed as a real bool; non-bool spellings are rejected.
+    data["arms"][1]["microphone"] = "loud"
+    with pytest.raises(ConfigError) as ei:
+        load_workcell_config_from_dict(tmp_path, data)
+    assert ei.value.loc == "/arms/1/microphone"
+
+
+def load_workcell_config_from_dict(tmp_path: Path, data: dict):
+    path = tmp_path / "workcell.yaml"
+    path.write_text(yaml.safe_dump(data))
+    return load_workcell_config(path)
+
+
 # -- PoseModel bridge ------------------------------------------------------------
 
 
