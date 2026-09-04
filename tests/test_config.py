@@ -245,3 +245,23 @@ def test_safety_config_validators():
     with pytest.raises(ValueError):
         SafetyConfig(enabled=False, safety_debug=True)
     assert SafetyConfig(enabled=False).safety_debug is False  # sim may disable
+
+
+def test_v4l2_camera_by_usb_serial_and_fourcc():
+    """v4l2 may be addressed by USB serial instead of a path (RealSense D435i colour
+    over UVC: the by-id symlinks collide between interfaces); fourcc is a 4-char
+    pixel format defaulting to MJPG."""
+    from apollo_mavis_v2_core.schemas import CameraConfig, WorkcellConfig
+
+    d = _hardware_dict()
+    d["cameras"] = [
+        {"id": "view_wrist", "kind": "v4l2", "serial": "349643062582", "fourcc": "YUYV"}
+    ]
+    cam = WorkcellConfig.model_validate(d).cameras[0]
+    assert cam.device_path is None and cam.serial == "349643062582" and cam.fourcc == "YUYV"
+    assert CameraConfig(id="c", kind="v4l2", device_path="/dev/video4").fourcc == "MJPG"
+    with pytest.raises(ValidationError):
+        CameraConfig(id="c", kind="v4l2", device_path="/dev/video4", fourcc="MJPEG")
+    d["cameras"] = [{"id": "c", "kind": "v4l2"}]
+    with pytest.raises(ValidationError, match="device_path or serial"):
+        WorkcellConfig.model_validate(d)

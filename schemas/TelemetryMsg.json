@@ -604,7 +604,7 @@
       "type": "object"
     },
     "MicrophoneTelemetry": {
-      "description": "Microphone block (phase-11; 04-runtime \u00a713.3), additive.\n\nEvery field defaults so a producer without a microphone still validates.\nOne frame per telemetry tick (frame length = ``sample_rate / telemetry_hz``,\n1920 samples at 48 kHz / 25 Hz); the UI de-duplicates on ``seq``.\n``env_min``/``env_max`` are the per-bin min/max envelope of the frame as 64\nint8 values (-127..127, time-ordered) for the scrolling oscilloscope;\n``rms_dbfs``/``peak_dbfs`` are full-scale levels (0 dBFS = |1.0|), ``None``\nwhen no frame has arrived. ``status`` shares ``MicStatus`` with\n``MicrophoneInfo`` (\u00a712).",
+      "description": "Microphone block (phase-11; 04-runtime \u00a713.3), additive.\n\nEvery field defaults so a producer without a microphone still validates.\nOne frame per telemetry tick (frame length = ``sample_rate / telemetry_hz``,\n1920 samples at 48 kHz / 25 Hz); the UI de-duplicates on ``seq``.\n``env_min``/``env_max`` are the per-bin min/max envelope of the frame as 64\nint8 values (-127..127, time-ordered) for the scrolling oscilloscope,\nquantised RELATIVE TO THE FRAME PEAK (the loudest sample maps to +-127, so a\nquiet room keeps its shape); absolute = ``env / 127 * 10 ** (peak_dbfs /\n20)``. ``rms_dbfs``/``peak_dbfs`` are full-scale levels (0 dBFS = |1.0|),\n``None`` when no frame has arrived. ``status`` shares ``MicStatus`` with\n``MicrophoneInfo`` (\u00a712).",
       "properties": {
         "age_s": {
           "anyOf": [

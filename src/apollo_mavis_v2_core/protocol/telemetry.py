@@ -173,9 +173,11 @@ class MicrophoneTelemetry(BaseModel):
     One frame per telemetry tick (frame length = ``sample_rate / telemetry_hz``,
     1920 samples at 48 kHz / 25 Hz); the UI de-duplicates on ``seq``.
     ``env_min``/``env_max`` are the per-bin min/max envelope of the frame as 64
-    int8 values (-127..127, time-ordered) for the scrolling oscilloscope;
-    ``rms_dbfs``/``peak_dbfs`` are full-scale levels (0 dBFS = |1.0|), ``None``
-    when no frame has arrived. ``status`` shares ``MicStatus`` with
+    int8 values (-127..127, time-ordered) for the scrolling oscilloscope,
+    quantised RELATIVE TO THE FRAME PEAK (the loudest sample maps to +-127, so a
+    quiet room keeps its shape); absolute = ``env / 127 * 10 ** (peak_dbfs /
+    20)``. ``rms_dbfs``/``peak_dbfs`` are full-scale levels (0 dBFS = |1.0|),
+    ``None`` when no frame has arrived. ``status`` shares ``MicStatus`` with
     ``MicrophoneInfo`` (§12).
     """
 
@@ -189,8 +191,8 @@ class MicrophoneTelemetry(BaseModel):
     rms_dbfs: float | None = None  # frame RMS level
     peak_dbfs: float | None = None  # frame peak level
     clipping: bool = False  # peak >= -1 dBFS
-    env_min: list[int] = []  # 64 x int8 (-127..127), time-ordered per-bin minimum
-    env_max: list[int] = []  # 64 x int8 (-127..127), time-ordered per-bin maximum
+    env_min: list[int] = []  # 64 x int8 (-127..127) rel. to frame peak, per-bin minimum
+    env_max: list[int] = []  # 64 x int8 (-127..127) rel. to frame peak, per-bin maximum
     overruns: int = 0  # backend overrun / dropped-block count since start
 
 

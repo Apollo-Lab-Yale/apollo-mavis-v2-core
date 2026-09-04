@@ -72,8 +72,9 @@ class CameraConfig(BaseModel):
 
     id: str
     kind: Literal["v4l2", "realsense", "sim"]
-    device_path: str | None = None  # v4l2 (stable by-id path)
-    serial: str | None = None  # realsense
+    device_path: str | None = None  # v4l2: explicit node or stable by-path / by-id symlink
+    serial: str | None = None  # realsense: device serial; v4l2: USB serial (sysfs lookup)
+    fourcc: str = Field("MJPG", min_length=4, max_length=4)  # v4l2 pixel format (RS colour: YUYV)
     resolution: tuple[int, int] = (640, 480)
     fps: int = 30
     intrinsics: CameraIntrinsics | None = None
@@ -112,8 +113,8 @@ class WorkcellConfig(BaseModel):
                     raise ValueError(f"hardware arm {arm.id!r} requires ip")
 
         for cam in self.cameras:
-            if cam.kind == "v4l2" and not cam.device_path:
-                raise ValueError(f"v4l2 camera {cam.id!r} requires device_path")
+            if cam.kind == "v4l2" and not (cam.device_path or cam.serial):
+                raise ValueError(f"v4l2 camera {cam.id!r} requires device_path or serial")
             if cam.kind == "realsense" and not cam.serial:
                 raise ValueError(f"realsense camera {cam.id!r} requires serial")
             if cam.kind == "sim" and self.kind != "sim":
