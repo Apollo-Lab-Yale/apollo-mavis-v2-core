@@ -255,10 +255,10 @@ def test_v4l2_camera_by_usb_serial_and_fourcc():
 
     d = _hardware_dict()
     d["cameras"] = [
-        {"id": "view_wrist", "kind": "v4l2", "serial": "349643062582", "fourcc": "YUYV"}
+        {"id": "view_wrist", "kind": "v4l2", "serial": "322143060792", "fourcc": "YUYV"}
     ]
     cam = WorkcellConfig.model_validate(d).cameras[0]
-    assert cam.device_path is None and cam.serial == "349643062582" and cam.fourcc == "YUYV"
+    assert cam.device_path is None and cam.serial == "322143060792" and cam.fourcc == "YUYV"
     assert CameraConfig(id="c", kind="v4l2", device_path="/dev/video4").fourcc == "MJPG"
     with pytest.raises(ValidationError):
         CameraConfig(id="c", kind="v4l2", device_path="/dev/video4", fourcc="MJPEG")
