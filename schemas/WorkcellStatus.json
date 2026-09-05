@@ -100,7 +100,8 @@
           "enum": [
             "v4l2",
             "realsense",
-            "sim"
+            "sim",
+            "twin"
           ],
           "title": "Kind",
           "type": "string"

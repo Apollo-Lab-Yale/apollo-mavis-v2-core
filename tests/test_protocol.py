@@ -21,6 +21,13 @@ from apollo_mavis_v2_core.protocol.control import (
     parse_client_msg,
     validate_action_args,
 )
+from apollo_mavis_v2_core.protocol.hardware_monitor import (
+    ArmMonitorStatus,
+    ArmMonitorTelemetry,
+    HardwareMonitorTelemetry,
+    TwinOverlayStatus,
+    TwinOverlayTelemetry,
+)
 from apollo_mavis_v2_core.protocol.microphone import MicrophoneInfo, MicStatus
 from apollo_mavis_v2_core.protocol.session import (
     ArmStatusInfo,
@@ -53,6 +60,7 @@ from apollo_mavis_v2_core.protocol.tracker import (
     TrackerCalibrationStatus,
     YawGesturePoint,
 )
+from apollo_mavis_v2_core.protocol.video import is_reserved_stream
 from apollo_mavis_v2_core.schemas.safety import CollisionReport
 
 _POSE = PoseMsg(position=(0.3, 0.0, 0.4), orientation=(1.0, 0.0, 0.0, 0.0))
@@ -233,6 +241,83 @@ _MIC_INFO_ABSENT = MicrophoneInfo(
     detail="no PulseAudio source matches 'NT-USB Mini'",
 )
 
+# phase-09a read-only hardware monitor + twin overlay, mirroring the 2026-09-04 live
+# facts: both linear tracks unhomed (raw register 0, position meaningless), the
+# Perception Arm latching controller error C19, the Manipulation Arm's overlay assuming
+# rail 0.65 m. Joint 1 is the raw controller angle (keyframe = pi; no offset).
+_Q_KEYFRAME = [3.14159, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+_TCP_KEYFRAME = [0.207, 0.0, 0.112, 3.14159, 0.0, 0.0]  # flange pose, base frame
+_MON_GRIP_RUNNING = ArmMonitorTelemetry(
+    arm_id="grip",
+    status="running",
+    seq=812,
+    age_s=0.041,
+    q=_Q_KEYFRAME,
+    tcp_pose=_TCP_KEYFRAME,
+    rail_present=True,
+    rail_homed=False,
+    rail_enabled=False,
+    rail_pos_m=None,  # not homed -> meaningless
+    rail_raw_mm=0.0,
+    gripper_open_frac=0.93,
+    gripper_raw=78.4,
+    error_code=0,
+    warn_code=0,
+    state=4,
+    mode=0,
+)
+_MON_VIEW_ERROR = ArmMonitorTelemetry(
+    arm_id="view",
+    status="running",
+    detail="controller error 19: End Effector Communication Error",
+    seq=809,
+    age_s=0.038,
+    q=_Q_KEYFRAME,
+    tcp_pose=_TCP_KEYFRAME,
+    rail_present=True,
+    rail_homed=False,
+    rail_enabled=False,
+    rail_raw_mm=0.0,
+    gripper_open_frac=None,  # gripper "none"
+    error_code=19,
+    state=4,
+    mode=0,
+)
+_OVERLAY_GRIP_LIVE = TwinOverlayTelemetry(
+    stream_id="grip_wrist_align",
+    camera_id="grip_wrist",
+    arm_id="grip",
+    status="live",
+    detail="rail not homed - twin assumes 0.65 m",
+    fps=11.8,
+    rail_fallback_m=0.65,
+    joint1_offset_rad=0.0,
+    mask_fraction=0.184,
+)
+_OVERLAY_VIEW_WAITING = TwinOverlayTelemetry(
+    stream_id="view_wrist_align", camera_id="view_wrist", arm_id="view", status="waiting",
+    detail="no camera frame yet",
+)
+_HW_MONITOR = HardwareMonitorTelemetry(
+    enabled=True,
+    paused=False,
+    arms=[_MON_GRIP_RUNNING, _MON_VIEW_ERROR],
+    overlays=[_OVERLAY_GRIP_LIVE, _OVERLAY_VIEW_WAITING],
+)
+# A hardware session owns the boxes: connections released, overlays switched off.
+_HW_MONITOR_PAUSED = HardwareMonitorTelemetry(
+    enabled=True,
+    paused=True,
+    arms=[
+        ArmMonitorTelemetry(arm_id="grip", status="paused", detail="hardware session active"),
+        ArmMonitorTelemetry(arm_id="view", status="paused", detail="hardware session active"),
+    ],
+    overlays=[
+        _OVERLAY_GRIP_LIVE.model_copy(update={"status": "off", "detail": "", "fps": 0.0}),
+        _OVERLAY_VIEW_WAITING.model_copy(update={"status": "off", "detail": ""}),
+    ],
+)
+
 _WIRE_MODELS: list[BaseModel] = [
     HelloMsg(epoch="ep0", session_id="s0", role="controller"),
     HelloMsg(epoch="ep0", session_id=None, role="observer"),
@@ -309,6 +394,28 @@ _WIRE_MODELS: list[BaseModel] = [
     _MIC_INFO_ABSENT,
     MicrophoneInfo(mic_id="mic_view", label="View arm microphone", kind="fake", source=None,
                    sample_rate=48000, live=True, status="live"),
+    # phase-09a hardware monitor + twin overlay (TelemetryMsg.hardware_monitor)
+    ArmMonitorTelemetry(arm_id="grip"),
+    ArmMonitorTelemetry(arm_id="view", status="connecting", detail="opening 192.168.2.219"),
+    ArmMonitorTelemetry(arm_id="grip", status="stale", seq=44, age_s=1.7, q=_Q_KEYFRAME),
+    ArmMonitorTelemetry(arm_id="grip", status="error", detail="connect: [Errno 111] refused"),
+    _MON_GRIP_RUNNING,
+    _MON_VIEW_ERROR,
+    _MON_GRIP_RUNNING.model_copy(update={"rail_homed": True, "rail_enabled": True,
+                                         "rail_pos_m": 0.65, "rail_raw_mm": 650.0}),
+    TwinOverlayTelemetry(stream_id="grip_wrist_align", camera_id="grip_wrist", arm_id="grip"),
+    TwinOverlayTelemetry(stream_id="view_wrist_align", camera_id="view_wrist", arm_id="view",
+                         status="stale", detail="monitor stale", fps=12.0, mask_fraction=0.41),
+    TwinOverlayTelemetry(stream_id="view_wrist_align", camera_id="view_wrist", arm_id="view",
+                         status="error", detail="EGL context lost"),
+    _OVERLAY_GRIP_LIVE,
+    _OVERLAY_VIEW_WAITING,
+    HardwareMonitorTelemetry(),
+    HardwareMonitorTelemetry(enabled=False, arms=[
+        ArmMonitorTelemetry(arm_id="grip", detail="apollo_mavis_v2_hardware not importable"),
+    ]),
+    _HW_MONITOR,
+    _HW_MONITOR_PAUSED,
     TelemetryMsg(
         seq=1,
         ts=12.0,
@@ -324,6 +431,7 @@ _WIRE_MODELS: list[BaseModel] = [
         session=SessionTelemetry(state="RUNNING"),
         tracker=_TRACKER_ENGAGED,
         microphone=_MIC_LIVE,
+        hardware_monitor=_HW_MONITOR,
     ),
     SessionSpec(
         mode="collect",
@@ -359,6 +467,16 @@ _WIRE_MODELS: list[BaseModel] = [
     CameraInfo(
         camera_id="camera1", kind="v4l2", label="camera1", resolution=(640, 480), fps=30,
         live=False,  # configured, not attached (Hardware tab draws a black tile)
+    ),
+    # phase-09a: digital-twin overlay rows (kind "twin"); live only while the real camera
+    # is live AND the overlay is live/stale.
+    CameraInfo(
+        camera_id="grip_wrist_align", kind="twin", label="Manipulation · twin overlay",
+        resolution=(640, 480), fps=12, live=True,
+    ),
+    CameraInfo(
+        camera_id="view_wrist_align", kind="twin", label="Perception · twin overlay",
+        resolution=(640, 480), fps=12, live=False,
     ),
     WorkcellStatus(kind="sim", available_kinds=["sim"], arms=[], cameras=[]),
     WorkcellStatus(
@@ -588,7 +706,9 @@ def test_telemetry_microphone_block_is_additive():
         arms=[], collision=CollisionReport.ok(), clearances=[],
         episode=None, dagger=None, inference=None, microphone=_MIC_LIVE,
     )
-    assert list(TelemetryMsg.model_fields)[-3:] == ["session", "tracker", "microphone"]
+    assert list(TelemetryMsg.model_fields)[-4:] == [
+        "session", "tracker", "microphone", "hardware_monitor",
+    ]
     assert TelemetryMsg.model_fields["microphone"].default is None
     legacy = frame.model_dump(mode="json")
     legacy.pop("microphone")
@@ -665,6 +785,189 @@ def test_workcell_status_phase11_fields_are_additive():
     for bad in ("booting", "OPEN", ""):
         with pytest.raises(ValidationError):
             ArmStatusInfo.model_validate({**legacy_arm, "reachable": bad})
+
+
+def test_arm_monitor_telemetry_fields_pinned_and_defaulted():
+    """phase-09a: read-only monitor row, spelled exactly; only ``arm_id`` is required."""
+    assert set(ArmMonitorTelemetry.model_fields) == {
+        "arm_id", "status", "detail", "seq", "age_s", "q", "tcp_pose",
+        "rail_present", "rail_homed", "rail_enabled", "rail_pos_m", "rail_raw_mm",
+        "gripper_open_frac", "gripper_raw", "error_code", "warn_code", "state", "mode",
+    }
+    required = {n for n, f in ArmMonitorTelemetry.model_fields.items() if f.is_required()}
+    assert required == {"arm_id"}
+    off = ArmMonitorTelemetry(arm_id="grip")
+    assert off.status == "off" and off.detail == "" and off.seq == 0 and off.age_s is None
+    assert off.q == [] and off.tcp_pose == []
+    assert (off.rail_present, off.rail_homed, off.rail_enabled) == (None, None, None)
+    assert (off.rail_pos_m, off.rail_raw_mm) == (None, None)
+    assert (off.gripper_open_frac, off.gripper_raw) == (None, None)
+    assert (off.error_code, off.warn_code, off.state, off.mode) == (0, 0, None, None)
+    # Mutable list defaults are per-instance (pydantic copies them).
+    other = ArmMonitorTelemetry(arm_id="grip")
+    off.q.append(1.0)
+    assert other.q == []
+    # Status vocabulary, spelled exactly; "paused" = a hardware session owns the box.
+    assert get_args(ArmMonitorStatus) == (
+        "off", "connecting", "running", "stale", "paused", "error",
+    )
+    assert ArmMonitorTelemetry.model_fields["status"].annotation == ArmMonitorStatus
+    for bad in ("tracking", "live", "no_backend", "RUNNING", ""):
+        with pytest.raises(ValidationError):
+            ArmMonitorTelemetry(arm_id="grip", status=bad)
+    with pytest.raises(ValidationError):
+        ArmMonitorTelemetry()  # arm_id is required
+    with pytest.raises(ValidationError):
+        ArmMonitorTelemetry(arm_id="grip", q=["a"] * 7)
+    with pytest.raises(ValidationError):
+        ArmMonitorTelemetry(arm_id="grip", error_code=1.5)
+    # Live facts (2026-09-04): unhomed track -> rail_pos_m None while rail_raw_mm reads 0;
+    # the Perception Arm latches C19 with gripper "none"; q is the raw controller angle.
+    wire = json.loads(_MON_GRIP_RUNNING.model_dump_json())
+    assert wire["rail_present"] is True and wire["rail_homed"] is False
+    assert wire["rail_pos_m"] is None and wire["rail_raw_mm"] == 0.0
+    assert len(wire["q"]) == 7 and len(wire["tcp_pose"]) == 6 and wire["q"][0] == 3.14159
+    assert wire["state"] == 4 and wire["mode"] == 0 and wire["gripper_open_frac"] == 0.93
+    assert ArmMonitorTelemetry.model_validate(wire) == _MON_GRIP_RUNNING
+    view = json.loads(_MON_VIEW_ERROR.model_dump_json())
+    assert view["status"] == "running" and view["error_code"] == 19
+    assert view["gripper_open_frac"] is None and view["gripper_raw"] is None
+    assert view["detail"] == "controller error 19: End Effector Communication Error"
+    assert ArmMonitorTelemetry.model_validate(view) == _MON_VIEW_ERROR
+
+
+def test_twin_overlay_telemetry_fields_pinned_and_defaulted():
+    """phase-09a: one ``<camera_id>_align`` stream; the three ids required, the rest default."""
+    assert set(TwinOverlayTelemetry.model_fields) == {
+        "stream_id", "camera_id", "arm_id", "status", "detail", "fps",
+        "rail_fallback_m", "joint1_offset_rad", "mask_fraction",
+    }
+    required = {n for n, f in TwinOverlayTelemetry.model_fields.items() if f.is_required()}
+    assert required == {"stream_id", "camera_id", "arm_id"}
+    off = TwinOverlayTelemetry(stream_id="grip_wrist_align", camera_id="grip_wrist", arm_id="grip")
+    assert off.status == "off" and off.detail == "" and off.fps == 0.0
+    assert off.rail_fallback_m is None
+    assert off.joint1_offset_rad == 0.0 and off.mask_fraction == 0.0
+    assert get_args(TwinOverlayStatus) == ("off", "waiting", "live", "stale", "error")
+    assert TwinOverlayTelemetry.model_fields["status"].annotation == TwinOverlayStatus
+    for bad in ("running", "paused", "tracking", "LIVE", ""):
+        with pytest.raises(ValidationError):
+            TwinOverlayTelemetry.model_validate({**off.model_dump(), "status": bad})
+    for key in ("stream_id", "camera_id", "arm_id"):
+        with pytest.raises(ValidationError):
+            TwinOverlayTelemetry.model_validate(
+                {k: v for k, v in off.model_dump().items() if k != key}
+            )
+    # Rail fallback in use (track not homed): the block carries the assumed position and
+    # the operator-facing reason. The stream id is the camera id + "_align": never a
+    # camera id, never "*_wrist_cam", never a reserved session render (04-runtime §13.4).
+    wire = json.loads(_OVERLAY_GRIP_LIVE.model_dump_json())
+    assert wire["rail_fallback_m"] == 0.65
+    assert wire["detail"] == "rail not homed - twin assumes 0.65 m"
+    assert wire["status"] == "live" and wire["fps"] == 11.8 and wire["mask_fraction"] == 0.184
+    assert wire["stream_id"] == f"{wire['camera_id']}_align"
+    assert not wire["stream_id"].endswith("_wrist_cam")
+    assert not is_reserved_stream(wire["stream_id"])
+    assert TwinOverlayTelemetry.model_validate(wire) == _OVERLAY_GRIP_LIVE
+    waiting = json.loads(_OVERLAY_VIEW_WAITING.model_dump_json())
+    assert waiting["status"] == "waiting" and waiting["rail_fallback_m"] is None
+    assert waiting["fps"] == 0.0 and waiting["mask_fraction"] == 0.0
+
+
+def test_hardware_monitor_telemetry_block_pinned_and_defaulted():
+    """phase-09a: the block validates empty (no hardware package) and nests both lists."""
+    assert set(HardwareMonitorTelemetry.model_fields) == {"enabled", "paused", "arms", "overlays"}
+    assert all(not f.is_required() for f in HardwareMonitorTelemetry.model_fields.values())
+    empty = HardwareMonitorTelemetry()
+    assert empty.enabled is False and empty.paused is False
+    assert empty.arms == [] and empty.overlays == []
+    other = HardwareMonitorTelemetry()
+    empty.arms.append(_MON_GRIP_RUNNING)
+    assert other.arms == []  # per-instance list defaults
+    wire = json.loads(_HW_MONITOR.model_dump_json())
+    assert wire["enabled"] is True and wire["paused"] is False
+    assert [a["arm_id"] for a in wire["arms"]] == ["grip", "view"]
+    assert [a["status"] for a in wire["arms"]] == ["running", "running"]
+    assert [a["error_code"] for a in wire["arms"]] == [0, 19]
+    assert [o["stream_id"] for o in wire["overlays"]] == ["grip_wrist_align", "view_wrist_align"]
+    assert [o["status"] for o in wire["overlays"]] == ["live", "waiting"]
+    assert HardwareMonitorTelemetry.model_validate(wire) == _HW_MONITOR
+    # Paused = a hardware session owns the boxes: connections released, overlays off.
+    paused = json.loads(_HW_MONITOR_PAUSED.model_dump_json())
+    assert paused["enabled"] is True and paused["paused"] is True
+    assert {a["status"] for a in paused["arms"]} == {"paused"}
+    assert {o["status"] for o in paused["overlays"]} == {"off"}
+    assert HardwareMonitorTelemetry.model_validate(paused) == _HW_MONITOR_PAUSED
+    with pytest.raises(ValidationError):
+        HardwareMonitorTelemetry(arms=[{"status": "running"}])  # arm_id required per row
+    with pytest.raises(ValidationError):
+        HardwareMonitorTelemetry(overlays=[{"arm_id": "grip"}])  # stream/camera ids required
+    with pytest.raises(ValidationError):
+        HardwareMonitorTelemetry(paused="later")
+
+
+def test_telemetry_hardware_monitor_block_is_additive():
+    """Pre-09a producers (no ``hardware_monitor`` key) still parse; the block rides the frame."""
+    frame = TelemetryMsg(
+        seq=4, ts=15.0, epoch="ep0", active_arm=None, controller_connected=False,
+        arms=[], collision=CollisionReport.ok(), clearances=[],
+        episode=None, dagger=None, inference=None, hardware_monitor=_HW_MONITOR,
+    )
+    assert list(TelemetryMsg.model_fields)[-4:] == [
+        "session", "tracker", "microphone", "hardware_monitor",
+    ]
+    assert TelemetryMsg.model_fields["hardware_monitor"].default is None
+    legacy = frame.model_dump(mode="json")
+    legacy.pop("hardware_monitor")
+    parsed = TelemetryMsg.model_validate(legacy)
+    assert parsed.hardware_monitor is None
+    wire = json.loads(frame.model_dump_json())
+    assert wire["hardware_monitor"]["enabled"] is True
+    assert wire["hardware_monitor"]["arms"][1]["error_code"] == 19
+    assert wire["hardware_monitor"]["overlays"][0]["rail_fallback_m"] == 0.65
+    assert TelemetryMsg.model_validate(wire) == frame
+    # Session-less like tracker/microphone: no session, ``arms`` empty, monitor still live.
+    assert frame.arms == [] and frame.session is None and frame.hardware_monitor is not None
+    # A runtime without the hardware package still sends the defaulted block.
+    bare = frame.model_copy(update={"hardware_monitor": HardwareMonitorTelemetry()})
+    assert json.loads(bare.model_dump_json())["hardware_monitor"] == {
+        "enabled": False, "paused": False, "arms": [], "overlays": [],
+    }
+
+
+def test_camera_info_kind_gains_twin():
+    """phase-09a: ``kind == "twin"`` = digital-twin overlay stream (``<camera_id>_align``)."""
+    assert set(CameraInfo.model_fields) == {
+        "camera_id", "kind", "label", "resolution", "fps", "live",
+    }
+    assert get_args(CameraInfo.model_fields["kind"].annotation) == (
+        "v4l2", "realsense", "sim", "twin",
+    )
+    row = CameraInfo(
+        camera_id="grip_wrist_align", kind="twin", label="Manipulation · twin overlay",
+        resolution=(640, 480), fps=12, live=True,
+    )
+    wire = json.loads(row.model_dump_json())
+    assert wire["kind"] == "twin" and wire["resolution"] == [640, 480] and wire["fps"] == 12
+    assert CameraInfo.model_validate(wire) == row
+    # Existing kinds unchanged; unknown spellings rejected.
+    for kind in ("v4l2", "realsense", "sim"):
+        assert CameraInfo.model_validate({**wire, "kind": kind}).kind == kind
+    for bad in ("overlay", "align", "TWIN", ""):
+        with pytest.raises(ValidationError):
+            CameraInfo.model_validate({**wire, "kind": bad})
+    # Overlay rows ride /api/workcell next to the real cameras (same $defs class).
+    status = WorkcellStatus(
+        kind="hardware", available_kinds=["hardware", "sim"], arms=[],
+        cameras=[
+            CameraInfo(camera_id="grip_wrist", kind="v4l2", label="Manipulation Arm wrist",
+                       resolution=(640, 480), fps=30, live=True),
+            row,
+        ],
+    )
+    parsed = WorkcellStatus.model_validate_json(status.model_dump_json())
+    assert [c.kind for c in parsed.cameras] == ["v4l2", "twin"]
+    assert [c.camera_id for c in parsed.cameras] == ["grip_wrist", "grip_wrist_align"]
 
 
 def test_tracker_calibration_model_fields_pinned():

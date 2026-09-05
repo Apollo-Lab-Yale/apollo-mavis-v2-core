@@ -41,8 +41,9 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "SaveProfileArgs": control.SaveProfileArgs,
     "SetInitialConditionArgs": control.SetInitialConditionArgs,
     "TrackerSettingsArgs": control.TrackerSettingsArgs,
-    # telemetry (§11; embeds sub-models incl. TrackerTelemetry and
-    # MicrophoneTelemetry via $defs)
+    # telemetry (§11; embeds sub-models incl. TrackerTelemetry,
+    # MicrophoneTelemetry and HardwareMonitorTelemetry / ArmMonitorTelemetry /
+    # TwinOverlayTelemetry via $defs)
     "TelemetryMsg": telemetry.TelemetryMsg,
     # tracker calibration (§12; REST /api/tracker/calibration — the other
     # protocol.tracker models ride TelemetryMsg / TrackerCalibrationStatus $defs)
@@ -134,8 +135,7 @@ def main(argv: list[str] | None = None) -> int:
             drifted = check(args.out)
             if drifted:
                 print(
-                    f"schema drift in {args.out}: {', '.join(drifted)} "
-                    "(re-run export to update)",
+                    f"schema drift in {args.out}: {', '.join(drifted)} (re-run export to update)",
                     file=sys.stderr,
                 )
                 return 1

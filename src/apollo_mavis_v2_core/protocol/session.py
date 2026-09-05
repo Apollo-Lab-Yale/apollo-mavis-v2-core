@@ -86,7 +86,10 @@ class CameraInfo(BaseModel):
     """Landing-page camera card."""
 
     camera_id: str
-    kind: Literal["v4l2", "realsense", "sim"]
+    kind: Literal["v4l2", "realsense", "sim", "twin"]
+    # twin = digital-twin overlay stream (``<camera_id>_align``, phase-09a): the
+    #   twin rendered from the real wrist camera's viewpoint, tinted over the
+    #   real frame; additive
     label: str
     resolution: tuple[int, int]
     fps: int

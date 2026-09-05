@@ -1,5 +1,188 @@
 {
   "$defs": {
+    "ArmMonitorTelemetry": {
+      "description": "One arm as seen by the read-only state monitor.\n\nEvery field but ``arm_id`` defaults so an arm the monitor never reached\nstill validates. ``q`` is the controller's 7 joint angles in radians,\ncontroller order - an IDENTITY mapping onto the twin's ``<arm>_joint1..7``\n(verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller flange\npose (``tcp_offset`` zero) in the arm base frame, ``[x, y, z]`` m followed\nby ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package).\n``rail_pos_m`` is filled only while the track reports homed (``on_zero ==\n1``) AND enabled - the raw register is meaningless otherwise - whereas\n``rail_raw_mm`` is always reported when the registers are readable.\n``gripper_open_frac`` is 0 closed .. 1 open (``None`` for gripper\n``\"none\"``); ``gripper_raw`` is the SDK reading for diagnosis.\n``error_code``/``warn_code`` are the controller's codes (e.g. 19 = End\nModule Communication Error); ``state`` 4 = stopped / not enabled.",
+      "properties": {
+        "age_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Age S"
+        },
+        "arm_id": {
+          "title": "Arm Id",
+          "type": "string"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "error_code": {
+          "default": 0,
+          "title": "Error Code",
+          "type": "integer"
+        },
+        "gripper_open_frac": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gripper Open Frac"
+        },
+        "gripper_raw": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gripper Raw"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
+        "q": {
+          "default": [],
+          "items": {
+            "type": "number"
+          },
+          "title": "Q",
+          "type": "array"
+        },
+        "rail_enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Enabled"
+        },
+        "rail_homed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Homed"
+        },
+        "rail_pos_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Pos M"
+        },
+        "rail_present": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Present"
+        },
+        "rail_raw_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Raw Mm"
+        },
+        "seq": {
+          "default": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "State"
+        },
+        "status": {
+          "default": "off",
+          "enum": [
+            "off",
+            "connecting",
+            "running",
+            "stale",
+            "paused",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "tcp_pose": {
+          "default": [],
+          "items": {
+            "type": "number"
+          },
+          "title": "Tcp Pose",
+          "type": "array"
+        },
+        "warn_code": {
+          "default": 0,
+          "title": "Warn Code",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "arm_id"
+      ],
+      "title": "ArmMonitorTelemetry",
+      "type": "object"
+    },
     "ArmTelemetry": {
       "description": "Per-arm telemetry block.",
       "properties": {
@@ -505,6 +688,39 @@
         "duration_s"
       ],
       "title": "EpisodeStatus",
+      "type": "object"
+    },
+    "HardwareMonitorTelemetry": {
+      "description": "``TelemetryMsg.hardware_monitor`` block (phase-09a; 04-runtime \u00a713.3), additive.\n\nEvery field defaults so a runtime without the hardware package still emits\na valid (``enabled: false``) block. ``paused`` is true while a hardware\nsession owns the control boxes: the monitor releases its connections\ninstead of sharing a box between two SDK clients.",
+      "properties": {
+        "arms": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ArmMonitorTelemetry"
+          },
+          "title": "Arms",
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "overlays": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TwinOverlayTelemetry"
+          },
+          "title": "Overlays",
+          "type": "array"
+        },
+        "paused": {
+          "default": false,
+          "title": "Paused",
+          "type": "boolean"
+        }
+      },
+      "title": "HardwareMonitorTelemetry",
       "type": "object"
     },
     "InferenceStatus": {
@@ -1332,6 +1548,74 @@
       "title": "TrainerStatus",
       "type": "object"
     },
+    "TwinOverlayTelemetry": {
+      "description": "One digital-twin overlay stream (``<camera_id>_align``; 04-runtime \u00a713.4).\n\n``rail_fallback_m`` is set while the track is not homed and the twin\nassumes a configured rail position instead (``detail`` spells it out for\nthe tile caption); ``joint1_offset_rad`` echoes the diagnostic knob (0 =\nthe verified identity convention); ``mask_fraction`` is robot pixels /\nimage pixels of the last composited frame (0 = the twin sees no robot from\nthis camera).",
+      "properties": {
+        "arm_id": {
+          "title": "Arm Id",
+          "type": "string"
+        },
+        "camera_id": {
+          "title": "Camera Id",
+          "type": "string"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "fps": {
+          "default": 0.0,
+          "title": "Fps",
+          "type": "number"
+        },
+        "joint1_offset_rad": {
+          "default": 0.0,
+          "title": "Joint1 Offset Rad",
+          "type": "number"
+        },
+        "mask_fraction": {
+          "default": 0.0,
+          "title": "Mask Fraction",
+          "type": "number"
+        },
+        "rail_fallback_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Fallback M"
+        },
+        "status": {
+          "default": "off",
+          "enum": [
+            "off",
+            "waiting",
+            "live",
+            "stale",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "stream_id": {
+          "title": "Stream Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stream_id",
+        "camera_id",
+        "arm_id"
+      ],
+      "title": "TwinOverlayTelemetry",
+      "type": "object"
+    },
     "YawGesturePoint": {
       "description": "One captured point of the yaw gesture.",
       "properties": {
@@ -1417,6 +1701,17 @@
     "epoch": {
       "title": "Epoch",
       "type": "string"
+    },
+    "hardware_monitor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HardwareMonitorTelemetry"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "inference": {
       "anyOf": [

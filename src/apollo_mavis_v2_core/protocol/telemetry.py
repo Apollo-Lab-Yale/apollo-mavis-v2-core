@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from apollo_mavis_v2_core.dagger.types import ControlMode, TrainerStatus
+from apollo_mavis_v2_core.protocol.hardware_monitor import HardwareMonitorTelemetry
 from apollo_mavis_v2_core.protocol.microphone import MicStatus
 from apollo_mavis_v2_core.schemas.safety import CollisionReport
 
@@ -214,6 +215,7 @@ class TelemetryMsg(BaseModel):
     session: SessionTelemetry | None = None  # additive
     tracker: TrackerTelemetry | None = None  # additive (13-tracker §3.5)
     microphone: MicrophoneTelemetry | None = None  # additive (phase-11)
+    hardware_monitor: HardwareMonitorTelemetry | None = None  # additive (phase-09a)
 
 
 __all__ = [

@@ -359,3 +359,124 @@ def test_workcell_schemas_gain_phase11_fields(tmp_path):
     }
     # The nested arm rows carry the probe field too (same $defs class).
     assert "reachable" in workcell["$defs"]["ArmStatusInfo"]["properties"]
+
+
+def test_telemetry_schema_embeds_hardware_monitor_block(tmp_path):
+    """phase-09a: HardwareMonitorTelemetry + its two row models ride TelemetryMsg's $defs."""
+    out = tmp_path / "schemas"
+    export(out)
+    telemetry = json.loads((out / "TelemetryMsg.json").read_text())
+    assert {
+        "HardwareMonitorTelemetry", "ArmMonitorTelemetry", "TwinOverlayTelemetry",
+    } <= set(telemetry["$defs"])
+    block = telemetry["properties"]["hardware_monitor"]
+    assert {"$ref": "#/$defs/HardwareMonitorTelemetry"} in block["anyOf"]
+    assert {"type": "null"} in block["anyOf"]
+    assert block["default"] is None
+    assert "hardware_monitor" not in telemetry["required"]
+    # Additive: sits after ``microphone`` in the model (schema keys are sorted).
+    assert {"session", "tracker", "microphone", "hardware_monitor"} <= set(
+        telemetry["properties"]
+    )
+    monitor = telemetry["$defs"]["HardwareMonitorTelemetry"]
+    assert set(monitor["properties"]) == {"enabled", "paused", "arms", "overlays"}
+    assert "required" not in monitor  # every field defaults (no-hardware producers validate)
+    for key in ("enabled", "paused"):
+        assert monitor["properties"][key] == {
+            "type": "boolean", "default": False, "title": key.capitalize(),
+        }, key
+    arms = monitor["properties"]["arms"]
+    assert arms["type"] == "array" and arms["items"] == {"$ref": "#/$defs/ArmMonitorTelemetry"}
+    assert arms["default"] == []
+    overlays = monitor["properties"]["overlays"]
+    assert overlays["type"] == "array"
+    assert overlays["items"] == {"$ref": "#/$defs/TwinOverlayTelemetry"}
+    assert overlays["default"] == []
+
+    arm = telemetry["$defs"]["ArmMonitorTelemetry"]
+    assert set(arm["properties"]) == {
+        "arm_id", "status", "detail", "seq", "age_s", "q", "tcp_pose",
+        "rail_present", "rail_homed", "rail_enabled", "rail_pos_m", "rail_raw_mm",
+        "gripper_open_frac", "gripper_raw", "error_code", "warn_code", "state", "mode",
+    }
+    assert arm["required"] == ["arm_id"]
+    assert arm["properties"]["arm_id"] == {"type": "string", "title": "Arm Id"}
+    assert arm["properties"]["status"] == {
+        "type": "string",
+        "enum": ["off", "connecting", "running", "stale", "paused", "error"],
+        "default": "off",
+        "title": "Status",
+    }
+    assert arm["properties"]["detail"] == {"type": "string", "default": "", "title": "Detail"}
+    for key, title in (("seq", "Seq"), ("error_code", "Error Code"), ("warn_code", "Warn Code")):
+        assert arm["properties"][key] == {"type": "integer", "default": 0, "title": title}, key
+    for key in ("q", "tcp_pose"):
+        prop = arm["properties"][key]
+        assert prop["type"] == "array" and prop["items"] == {"type": "number"}, key
+        assert prop["default"] == [], key
+    for key in ("age_s", "rail_pos_m", "rail_raw_mm", "gripper_open_frac", "gripper_raw"):
+        prop = arm["properties"][key]
+        assert {"type": "number"} in prop["anyOf"] and {"type": "null"} in prop["anyOf"], key
+        assert prop["default"] is None, key
+    for key in ("rail_present", "rail_homed", "rail_enabled"):
+        prop = arm["properties"][key]
+        assert {"type": "boolean"} in prop["anyOf"] and {"type": "null"} in prop["anyOf"], key
+        assert prop["default"] is None, key
+    for key in ("state", "mode"):
+        prop = arm["properties"][key]
+        assert {"type": "integer"} in prop["anyOf"] and {"type": "null"} in prop["anyOf"], key
+        assert prop["default"] is None, key
+
+    overlay = telemetry["$defs"]["TwinOverlayTelemetry"]
+    assert set(overlay["properties"]) == {
+        "stream_id", "camera_id", "arm_id", "status", "detail", "fps",
+        "rail_fallback_m", "joint1_offset_rad", "mask_fraction",
+    }
+    assert set(overlay["required"]) == {"stream_id", "camera_id", "arm_id"}
+    for key, title in (("stream_id", "Stream Id"), ("camera_id", "Camera Id"),
+                       ("arm_id", "Arm Id")):
+        assert overlay["properties"][key] == {"type": "string", "title": title}, key
+    assert overlay["properties"]["status"] == {
+        "type": "string",
+        "enum": ["off", "waiting", "live", "stale", "error"],
+        "default": "off",
+        "title": "Status",
+    }
+    assert overlay["properties"]["detail"] == {"type": "string", "default": "", "title": "Detail"}
+    for key, title in (
+        ("fps", "Fps"), ("joint1_offset_rad", "Joint1 Offset Rad"),
+        ("mask_fraction", "Mask Fraction"),
+    ):
+        assert overlay["properties"][key] == {
+            "type": "number", "default": 0.0, "title": title,
+        }, key
+    fallback = overlay["properties"]["rail_fallback_m"]
+    assert {"type": "number"} in fallback["anyOf"] and {"type": "null"} in fallback["anyOf"]
+    assert fallback["default"] is None
+    # None of the three exports top-level (EXPORTED_MODELS unchanged; contract §1).
+    index = json.loads((out / "index.json").read_text())
+    assert not {
+        "HardwareMonitorTelemetry", "ArmMonitorTelemetry", "TwinOverlayTelemetry",
+    } & set(index["models"])
+    assert not {
+        "HardwareMonitorTelemetry.json", "ArmMonitorTelemetry.json", "TwinOverlayTelemetry.json",
+    } & {p.name for p in out.iterdir()}
+
+
+def test_camera_info_schema_kind_gains_twin(tmp_path):
+    """phase-09a: ``CameraInfo.kind`` enum gains "twin" (overlay rows in /api/cameras)."""
+    out = tmp_path / "schemas"
+    export(out)
+    camera = json.loads((out / "CameraInfo.json").read_text())
+    fields = {"camera_id", "kind", "label", "resolution", "fps", "live"}
+    assert set(camera["properties"]) == fields
+    assert set(camera["required"]) == fields  # no defaults: every row spells its kind
+    assert camera["properties"]["kind"] == {
+        "type": "string", "enum": ["v4l2", "realsense", "sim", "twin"], "title": "Kind",
+    }
+    assert camera["properties"]["live"] == {"type": "boolean", "title": "Live"}
+    assert "$defs" not in camera  # flat body
+    # The nested /api/workcell rows share the class (same enum in WorkcellStatus $defs).
+    workcell = json.loads((out / "WorkcellStatus.json").read_text())
+    nested = workcell["$defs"]["CameraInfo"]["properties"]["kind"]
+    assert nested["enum"] == ["v4l2", "realsense", "sim", "twin"]

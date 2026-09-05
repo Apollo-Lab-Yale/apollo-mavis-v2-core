@@ -15,6 +15,13 @@ from .control import (
     parse_client_msg,
     validate_action_args,
 )
+from .hardware_monitor import (
+    ArmMonitorStatus,
+    ArmMonitorTelemetry,
+    HardwareMonitorTelemetry,
+    TwinOverlayStatus,
+    TwinOverlayTelemetry,
+)
 from .keymap import (
     DISCRETE_CODES,
     HELD_CODES,
@@ -125,6 +132,12 @@ __all__ = [
     # microphone (phase-11)
     "MicStatus",
     "MicrophoneInfo",
+    # hardware monitor + twin overlay (phase-09a)
+    "ArmMonitorStatus",
+    "ArmMonitorTelemetry",
+    "TwinOverlayStatus",
+    "TwinOverlayTelemetry",
+    "HardwareMonitorTelemetry",
     # video
     "HEADER_FMT",
     "HEADER_SIZE",
