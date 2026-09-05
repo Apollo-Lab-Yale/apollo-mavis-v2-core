@@ -6,10 +6,13 @@ READ-ONLY (joint angles, flange pose, linear-track and gripper registers,
 error/warn codes) and renders the ``mavis_v2`` digital twin from each wrist
 camera's viewpoint as a tinted overlay on the real frame (streams
 ``<camera_id>_align``, listed in ``/api/cameras`` with ``CameraInfo.kind ==
-"twin"``, §12). The monitor never sends motion commands; a hardware session
-PAUSES it (connections released) instead of sharing a box between two SDK
-clients. This module is a dependency-free leaf (pure pydantic) so
-``protocol.telemetry`` can import it without cycles; the models ride
+"twin"``, §12). The monitor never sends motion commands and writes nothing
+to a box unless the operator issues an explicit maintenance request
+(``protocol.maintenance``, phase-09b: clear errors / apply the controller-side
+safety parameters); a hardware session PAUSES it (connections released)
+instead of sharing a box between two SDK clients. This module is a
+dependency-free leaf (pure pydantic) so ``protocol.telemetry`` and
+``protocol.maintenance`` can import it without cycles; the models ride
 ``TelemetryMsg``'s ``$defs`` (§14) and none exports top-level.
 """
 
@@ -44,6 +47,13 @@ class ArmMonitorTelemetry(BaseModel):
     ``"none"``); ``gripper_raw`` is the SDK reading for diagnosis.
     ``error_code``/``warn_code`` are the controller's codes (e.g. 19 = End
     Module Communication Error); ``state`` 4 = stopped / not enabled.
+
+    phase-09b read-back (slow poll, additive): ``collision_sensitivity`` /
+    ``tcp_load_kg`` / ``tcp_load_cog_mm`` are the controller's CURRENT
+    safety parameters; ``backstops_match`` is the runtime's comparison against
+    the arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of
+    gravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is
+    true while a maintenance op executes on this arm.
     """
 
     arm_id: str
@@ -64,6 +74,12 @@ class ArmMonitorTelemetry(BaseModel):
     warn_code: int = 0
     state: int | None = None  # controller state (4 = stopped / not enabled)
     mode: int | None = None  # controller mode
+    # phase-09b read-back of the controller-side safety parameters + maintenance flag
+    collision_sensitivity: int | None = None  # controller collision sensitivity 0..5
+    tcp_load_kg: float | None = None  # controller tcp_load mass
+    tcp_load_cog_mm: list[float] = []  # controller tcp_load centre of gravity [x, y, z] mm
+    backstops_match: bool | None = None  # read-back == ArmConfig (runtime); None = not compared
+    maintenance_busy: bool = False  # a maintenance op is executing on this arm
 
 
 TwinOverlayStatus = Literal["off", "waiting", "live", "stale", "error"]

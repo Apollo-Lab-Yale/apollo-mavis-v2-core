@@ -20,6 +20,7 @@ from apollo_mavis_v2_core.errors import SchemaExportError
 from apollo_mavis_v2_core.protocol import (
     control,
     keymap,
+    maintenance,
     microphone,
     session,
     telemetry,
@@ -60,6 +61,10 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "PolicyInfo": session.PolicyInfo,
     # microphone (§12; REST /api/microphones — phase-11)
     "MicrophoneInfo": microphone.MicrophoneInfo,
+    # arm maintenance (§12; REST POST /api/hardware/arms/{arm_id}/maintenance —
+    # phase-09b; the result embeds ArmMonitorTelemetry via $defs)
+    "ArmMaintenanceRequest": maintenance.ArmMaintenanceRequest,
+    "ArmMaintenanceResult": maintenance.ArmMaintenanceResult,
     # misc (§8, §13, §6)
     "StateProfile": StateProfile,
     "KeymapEntry": keymap.KeymapEntry,

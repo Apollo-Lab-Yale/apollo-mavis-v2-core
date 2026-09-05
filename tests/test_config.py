@@ -265,3 +265,66 @@ def test_v4l2_camera_by_usb_serial_and_fourcc():
     d["cameras"] = [{"id": "c", "kind": "v4l2"}]
     with pytest.raises(ValidationError, match="device_path or serial"):
         WorkcellConfig.model_validate(d)
+
+
+def test_arm_config_controller_safety_fields_are_additive(tmp_path):
+    """phase-09b (§7): ``collision_sensitivity`` / ``reduced_tcp_boundary_mm`` /
+    ``expected_sn`` default to 3 / None / None; the sensitivity is bounded 0..5 and the
+    Reduced-mode boundary is exactly six ints (SDK ``set_reduced_tcp_boundary`` order)."""
+    from apollo_mavis_v2_core.schemas import ArmConfig
+
+    data = _hardware_dict()
+    for arm in load_workcell_config_from_dict(tmp_path, data).arms:
+        assert arm.collision_sensitivity == 3
+        assert arm.reduced_tcp_boundary_mm is None and arm.expected_sn is None
+    # 2026-09-04 provisional MAVIS values (payloads to be weighed): sensitivity 3 on both.
+    data["arms"][0].update(
+        {
+            "id": "grip",
+            "gripper": "xarm_g2",
+            "tcp_load_kg": 0.95,
+            "tcp_load_cog_mm": [0, 0, 60],
+            "collision_sensitivity": 3,
+        }
+    )
+    data["arms"][1].update(
+        {
+            "id": "view",
+            "gripper": "none",
+            "tcp_load_kg": 0.55,
+            "tcp_load_cog_mm": [0, 0, 90],
+            "collision_sensitivity": 3,
+            "reduced_tcp_boundary_mm": [700, -700, 400, -400, 600, -100],
+            "expected_sn": None,
+        }
+    )
+    grip, view = load_workcell_config_from_dict(tmp_path, data).arms
+    assert grip.collision_sensitivity == 3 and grip.tcp_load_kg == 0.95
+    assert grip.tcp_load_cog_mm == (0.0, 0.0, 60.0) and grip.reduced_tcp_boundary_mm is None
+    assert view.reduced_tcp_boundary_mm == (700, -700, 400, -400, 600, -100)
+    assert view.expected_sn is None and view.tcp_load_kg == 0.55
+    # Sensitivity bounds: 0 (off) .. 5 (most sensitive) inclusive; ints only.
+    for ok in (0, 5):
+        arm = ArmConfig(id="a", base_in_world={}, collision_sensitivity=ok)
+        assert arm.collision_sensitivity == ok
+    for bad in (-1, 6, 2.5, "high", None):
+        with pytest.raises(ValidationError):
+            ArmConfig(id="a", base_in_world={}, collision_sensitivity=bad)
+    data["arms"][0]["collision_sensitivity"] = 6
+    with pytest.raises(ConfigError) as ei:
+        load_workcell_config_from_dict(tmp_path, data)
+    assert ei.value.loc == "/arms/0/collision_sensitivity"
+    # Boundary: exactly six ints or absent.
+    for bad in (
+        [700, -700, 400, -400, 600],
+        [700] * 7,
+        [700.5, -700, 400, -400, 600, -100],
+        "box",
+    ):
+        with pytest.raises(ValidationError):
+            ArmConfig(id="a", base_in_world={}, reduced_tcp_boundary_mm=bad)
+    # expected_sn is a plain optional string (both MAVIS boxes read the model code XS1305,
+    # so the live config keeps it None).
+    assert ArmConfig(id="a", base_in_world={}, expected_sn="XS1305").expected_sn == "XS1305"
+    with pytest.raises(ValidationError):
+        ArmConfig(id="a", base_in_world={}, expected_sn=1305)

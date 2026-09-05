@@ -249,6 +249,8 @@ def test_exported_models_cover_spec_sections():
         "CameraInfo", "SceneInfo", "ProfileInfo", "PolicyInfo",
         # microphone (REST /api/microphones; phase-11)
         "MicrophoneInfo",
+        # arm maintenance (REST POST /api/hardware/arms/{arm_id}/maintenance; phase-09b)
+        "ArmMaintenanceRequest", "ArmMaintenanceResult",
         # misc
         "StateProfile", "KeymapEntry", "CollisionEvent",
     }
@@ -398,6 +400,9 @@ def test_telemetry_schema_embeds_hardware_monitor_block(tmp_path):
         "arm_id", "status", "detail", "seq", "age_s", "q", "tcp_pose",
         "rail_present", "rail_homed", "rail_enabled", "rail_pos_m", "rail_raw_mm",
         "gripper_open_frac", "gripper_raw", "error_code", "warn_code", "state", "mode",
+        # phase-09b read-back + maintenance flag
+        "collision_sensitivity", "tcp_load_kg", "tcp_load_cog_mm", "backstops_match",
+        "maintenance_busy",
     }
     assert arm["required"] == ["arm_id"]
     assert arm["properties"]["arm_id"] == {"type": "string", "title": "Arm Id"}
@@ -410,22 +415,29 @@ def test_telemetry_schema_embeds_hardware_monitor_block(tmp_path):
     assert arm["properties"]["detail"] == {"type": "string", "default": "", "title": "Detail"}
     for key, title in (("seq", "Seq"), ("error_code", "Error Code"), ("warn_code", "Warn Code")):
         assert arm["properties"][key] == {"type": "integer", "default": 0, "title": title}, key
-    for key in ("q", "tcp_pose"):
+    for key in ("q", "tcp_pose", "tcp_load_cog_mm"):
         prop = arm["properties"][key]
         assert prop["type"] == "array" and prop["items"] == {"type": "number"}, key
         assert prop["default"] == [], key
-    for key in ("age_s", "rail_pos_m", "rail_raw_mm", "gripper_open_frac", "gripper_raw"):
+    for key in ("age_s", "rail_pos_m", "rail_raw_mm", "gripper_open_frac", "gripper_raw",
+                "tcp_load_kg"):
         prop = arm["properties"][key]
         assert {"type": "number"} in prop["anyOf"] and {"type": "null"} in prop["anyOf"], key
         assert prop["default"] is None, key
-    for key in ("rail_present", "rail_homed", "rail_enabled"):
+    for key in ("rail_present", "rail_homed", "rail_enabled", "backstops_match"):
         prop = arm["properties"][key]
         assert {"type": "boolean"} in prop["anyOf"] and {"type": "null"} in prop["anyOf"], key
         assert prop["default"] is None, key
-    for key in ("state", "mode"):
+    for key in ("state", "mode", "collision_sensitivity"):
         prop = arm["properties"][key]
         assert {"type": "integer"} in prop["anyOf"] and {"type": "null"} in prop["anyOf"], key
         assert prop["default"] is None, key
+    # phase-09b: the read-back is unbounded here (it is what the controller reports; the
+    # 0..5 bound lives on ArmConfig), the busy flag a plain defaulted boolean.
+    assert "minimum" not in arm["properties"]["collision_sensitivity"]
+    assert arm["properties"]["maintenance_busy"] == {
+        "type": "boolean", "default": False, "title": "Maintenance Busy",
+    }
 
     overlay = telemetry["$defs"]["TwinOverlayTelemetry"]
     assert set(overlay["properties"]) == {
@@ -480,3 +492,76 @@ def test_camera_info_schema_kind_gains_twin(tmp_path):
     workcell = json.loads((out / "WorkcellStatus.json").read_text())
     nested = workcell["$defs"]["CameraInfo"]["properties"]["kind"]
     assert nested["enum"] == ["v4l2", "realsense", "sim", "twin"]
+
+
+def test_telemetry_schema_arm_telemetry_gains_fault_fields(tmp_path):
+    """phase-09b: ``ArmTelemetry.fault_detail`` / ``.recovering`` are defaulted (additive)."""
+    out = tmp_path / "schemas"
+    export(out)
+    telemetry = json.loads((out / "TelemetryMsg.json").read_text())
+    arm = telemetry["$defs"]["ArmTelemetry"]
+    assert set(arm["properties"]) == {
+        "arm_id", "connected", "q", "rail_pos_m", "ee_pose", "gripper_open_frac",
+        "error_code", "warn_code", "stale", "goto", "fault_detail", "recovering",
+    }
+    assert set(arm["required"]) == {
+        "arm_id", "connected", "q", "rail_pos_m", "ee_pose", "gripper_open_frac", "error_code",
+    }
+    assert arm["properties"]["fault_detail"] == {
+        "type": "string", "default": "", "title": "Fault Detail",
+    }
+    assert arm["properties"]["recovering"] == {
+        "type": "boolean", "default": False, "title": "Recovering",
+    }
+    # The pre-09b additive fields keep their shapes.
+    assert arm["properties"]["warn_code"] == {"type": "integer", "default": 0, "title": "Warn Code"}
+    assert arm["properties"]["stale"] == {"type": "boolean", "default": False, "title": "Stale"}
+    assert arm["properties"]["error_code"] == {"type": "integer", "title": "Error Code"}
+
+
+def test_arm_maintenance_schemas(tmp_path):
+    """phase-09b: the maintenance body + result export top-level; the result nests
+    ArmMonitorTelemetry (same class as TelemetryMsg's $defs)."""
+    out = tmp_path / "schemas"
+    export(out)
+    request = json.loads((out / "ArmMaintenanceRequest.json").read_text())
+    assert set(request["properties"]) == {"op"}
+    assert request["required"] == ["op"]
+    assert request["properties"]["op"] == {
+        "type": "string", "enum": ["clear_errors", "apply_backstops", "recover"], "title": "Op",
+    }
+    assert "$defs" not in request  # flat body
+
+    result = json.loads((out / "ArmMaintenanceResult.json").read_text())
+    assert set(result["properties"]) == {
+        "arm_id", "op", "path", "ok", "detail", "sdk_codes", "warnings", "before", "after",
+    }
+    assert set(result["required"]) == {"arm_id", "op", "path", "ok"}
+    assert result["properties"]["arm_id"] == {"type": "string", "title": "Arm Id"}
+    assert result["properties"]["op"] == request["properties"]["op"]
+    assert result["properties"]["path"] == {
+        "type": "string", "enum": ["monitor", "session"], "title": "Path",
+    }
+    assert result["properties"]["ok"] == {"type": "boolean", "title": "Ok"}
+    assert result["properties"]["detail"] == {"type": "string", "default": "", "title": "Detail"}
+    assert result["properties"]["sdk_codes"] == {
+        "type": "object", "additionalProperties": {"type": "integer"}, "default": {},
+        "title": "Sdk Codes",
+    }
+    assert result["properties"]["warnings"] == {
+        "type": "array", "items": {"type": "string"}, "default": [], "title": "Warnings",
+    }
+    for key in ("before", "after"):
+        prop = result["properties"][key]
+        assert {"$ref": "#/$defs/ArmMonitorTelemetry"} in prop["anyOf"], key
+        assert {"type": "null"} in prop["anyOf"] and prop["default"] is None, key
+    # The nested monitor row is the phase-09a class plus the 09b read-back, byte-identical
+    # to the one riding TelemetryMsg.
+    telemetry = json.loads((out / "TelemetryMsg.json").read_text())
+    assert result["$defs"]["ArmMonitorTelemetry"] == telemetry["$defs"]["ArmMonitorTelemetry"]
+    assert {"collision_sensitivity", "tcp_load_kg", "backstops_match", "maintenance_busy"} <= set(
+        result["$defs"]["ArmMonitorTelemetry"]["properties"]
+    )
+    assert set(result["$defs"]) == {"ArmMonitorTelemetry"}  # nothing else nests
+    index = json.loads((out / "index.json").read_text())
+    assert {"ArmMaintenanceRequest", "ArmMaintenanceResult"} <= set(index["models"])

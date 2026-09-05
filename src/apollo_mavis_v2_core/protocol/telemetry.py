@@ -43,6 +43,10 @@ class ArmTelemetry(BaseModel):
     stale: bool = False  # additive
     goto: Literal["planning", "executing", "failed"] | None = None
     # joint-panel lifecycle; "failed" transient
+    fault_detail: str = ""  # additive (phase-09b): controller fault this arm is stopped
+    #   for, e.g. "controller error 24: Speed Exceeds Limit"; "" = none
+    recovering: bool = False  # additive (phase-09b): recovery ran (session RECOVERING),
+    #   streaming resumes once the operator re-grips the clutch
 
 
 class ClearanceItem(BaseModel):

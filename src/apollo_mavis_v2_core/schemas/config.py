@@ -55,6 +55,14 @@ class ArmConfig(BaseModel):
     microphone: bool = False  # microphone body mounted ahead of the wrist camera
     #   (view arm of the hardware workcell) -> digital twin adds the collision
     #   body (03-sim §4); additive, phase-11
+    collision_sensitivity: int = Field(3, ge=0, le=5)  # -> set_collision_sensitivity
+    #   (0 = off .. 5 = most sensitive; MAVIS: 3 on both arms); volatile, applied
+    #   by backstops.apply_backstops at connect / from the UI; additive, phase-09b
+    reduced_tcp_boundary_mm: tuple[int, int, int, int, int, int] | None = None
+    #   Reduced-mode TCP boundary box [x_max, x_min, y_max, y_min, z_max, z_min]
+    #   mm (SDK set_reduced_tcp_boundary order); None = leave Reduced mode off
+    expected_sn: str | None = None  # controller SN verified at connect; None = skip
+    #   (both MAVIS boxes read the model code "XS1305", not a unique serial)
 
 
 class CameraIntrinsics(BaseModel):

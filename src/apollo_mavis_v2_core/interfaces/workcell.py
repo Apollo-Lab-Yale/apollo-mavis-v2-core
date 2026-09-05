@@ -8,7 +8,7 @@ identically (spine §3.3).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Literal
+from typing import Any, Literal
 
 from ..state import ArmState
 from .arm import ArmInterface
@@ -43,3 +43,14 @@ class WorkcellInterface(ABC):
     @abstractmethod
     def states(self) -> dict[str, ArmState]:
         """Latest snapshot per arm (same keys as :attr:`arms`)."""
+
+    def drain_events(self) -> list[Any]:
+        """Pop the driver events queued since the last call (phase-09b; additive).
+
+        Hardware workcells return the per-arm driver events (fault, recovered,
+        reseed, Studio-conflict, rail, gripper, stale) the runtime control loop
+        consumes once per tick to drive FAULT -> RECOVERING -> RUNNING
+        (04-runtime §15); the events are hardware-package types, hence
+        ``Any``. Non-abstract: sim and fake workcells inherit this ``[]``.
+        """
+        return []

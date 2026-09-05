@@ -1,0 +1,315 @@
+{
+  "$defs": {
+    "ArmMonitorTelemetry": {
+      "description": "One arm as seen by the read-only state monitor.\n\nEvery field but ``arm_id`` defaults so an arm the monitor never reached\nstill validates. ``q`` is the controller's 7 joint angles in radians,\ncontroller order - an IDENTITY mapping onto the twin's ``<arm>_joint1..7``\n(verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller flange\npose (``tcp_offset`` zero) in the arm base frame, ``[x, y, z]`` m followed\nby ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package).\n``rail_pos_m`` is filled only while the track reports homed (``on_zero ==\n1``) AND enabled - the raw register is meaningless otherwise - whereas\n``rail_raw_mm`` is always reported when the registers are readable.\n``gripper_open_frac`` is 0 closed .. 1 open (``None`` for gripper\n``\"none\"``); ``gripper_raw`` is the SDK reading for diagnosis.\n``error_code``/``warn_code`` are the controller's codes (e.g. 19 = End\nModule Communication Error); ``state`` 4 = stopped / not enabled.\n\nphase-09b read-back (slow poll, additive): ``collision_sensitivity`` /\n``tcp_load_kg`` / ``tcp_load_cog_mm`` are the controller's CURRENT\nsafety parameters; ``backstops_match`` is the runtime's comparison against\nthe arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of\ngravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is\ntrue while a maintenance op executes on this arm.",
+      "properties": {
+        "age_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Age S"
+        },
+        "arm_id": {
+          "title": "Arm Id",
+          "type": "string"
+        },
+        "backstops_match": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backstops Match"
+        },
+        "collision_sensitivity": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Collision Sensitivity"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "error_code": {
+          "default": 0,
+          "title": "Error Code",
+          "type": "integer"
+        },
+        "gripper_open_frac": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gripper Open Frac"
+        },
+        "gripper_raw": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gripper Raw"
+        },
+        "maintenance_busy": {
+          "default": false,
+          "title": "Maintenance Busy",
+          "type": "boolean"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
+        "q": {
+          "default": [],
+          "items": {
+            "type": "number"
+          },
+          "title": "Q",
+          "type": "array"
+        },
+        "rail_enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Enabled"
+        },
+        "rail_homed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Homed"
+        },
+        "rail_pos_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Pos M"
+        },
+        "rail_present": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Present"
+        },
+        "rail_raw_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Raw Mm"
+        },
+        "seq": {
+          "default": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "State"
+        },
+        "status": {
+          "default": "off",
+          "enum": [
+            "off",
+            "connecting",
+            "running",
+            "stale",
+            "paused",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "tcp_load_cog_mm": {
+          "default": [],
+          "items": {
+            "type": "number"
+          },
+          "title": "Tcp Load Cog Mm",
+          "type": "array"
+        },
+        "tcp_load_kg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tcp Load Kg"
+        },
+        "tcp_pose": {
+          "default": [],
+          "items": {
+            "type": "number"
+          },
+          "title": "Tcp Pose",
+          "type": "array"
+        },
+        "warn_code": {
+          "default": 0,
+          "title": "Warn Code",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "arm_id"
+      ],
+      "title": "ArmMonitorTelemetry",
+      "type": "object"
+    }
+  },
+  "description": "Outcome of one maintenance op (REST response; 200 whether or not ``ok``).\n\n``sdk_codes`` maps every SDK call the op made to its return code, in call\norder (``{\"clean_error\": 0, \"clean_warn\": 0}``); ``warnings`` lists the\nnon-fatal ``apply_backstops`` codes (e.g. a self-collision tool model the\nfirmware rejected). ``before``/``after`` are ``None`` when the executing\npath had no monitor sample (session path, or the monitor never connected).",
+  "properties": {
+    "after": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ArmMonitorTelemetry"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "arm_id": {
+      "title": "Arm Id",
+      "type": "string"
+    },
+    "before": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ArmMonitorTelemetry"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "detail": {
+      "default": "",
+      "title": "Detail",
+      "type": "string"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "op": {
+      "enum": [
+        "clear_errors",
+        "apply_backstops",
+        "recover"
+      ],
+      "title": "Op",
+      "type": "string"
+    },
+    "path": {
+      "enum": [
+        "monitor",
+        "session"
+      ],
+      "title": "Path",
+      "type": "string"
+    },
+    "sdk_codes": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "default": {},
+      "title": "Sdk Codes",
+      "type": "object"
+    },
+    "warnings": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "arm_id",
+    "op",
+    "path",
+    "ok"
+  ],
+  "title": "ArmMaintenanceResult",
+  "type": "object"
+}

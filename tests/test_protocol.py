@@ -28,6 +28,12 @@ from apollo_mavis_v2_core.protocol.hardware_monitor import (
     TwinOverlayStatus,
     TwinOverlayTelemetry,
 )
+from apollo_mavis_v2_core.protocol.maintenance import (
+    ArmMaintenanceOp,
+    ArmMaintenanceRequest,
+    ArmMaintenanceResult,
+    MaintenancePath,
+)
 from apollo_mavis_v2_core.protocol.microphone import MicrophoneInfo, MicStatus
 from apollo_mavis_v2_core.protocol.session import (
     ArmStatusInfo,
@@ -318,6 +324,54 @@ _HW_MONITOR_PAUSED = HardwareMonitorTelemetry(
     ],
 )
 
+# phase-09b error recovery. Per-arm session telemetry while the Manipulation Arm is stopped
+# on a controller fault (C24) and after the operator's "Clear errors & resume" ran the
+# recovery sequence (waiting for the clutch to be re-gripped).
+_ARM_FAULTED = _ARM.model_copy(update={
+    "error_code": 24, "goto": None,
+    "fault_detail": "controller error 24: Speed Exceeds Limit",
+})
+_ARM_RECOVERING = _ARM_FAULTED.model_copy(update={"error_code": 0, "recovering": True})
+# The Perception Arm after "Clear errors" from the Hardware tab, carrying the slow-poll
+# read-back of the controller-side safety parameters (2026-09-04 live values: tcp_load 0 kg,
+# sensitivity 1 - both wrong), then after "Apply safety settings" brought them to the
+# configured 3 / 0.55 kg / (0, 0, 90) mm.
+_MON_VIEW_CLEARED = _MON_VIEW_ERROR.model_copy(update={
+    "detail": "", "seq": 811, "error_code": 0,
+    "collision_sensitivity": 1, "tcp_load_kg": 0.0, "tcp_load_cog_mm": [0.0, 0.0, 0.0],
+    "backstops_match": False,
+})
+_MON_VIEW_BACKSTOPS = _MON_VIEW_CLEARED.model_copy(update={
+    "seq": 830, "collision_sensitivity": 3, "tcp_load_kg": 0.55,
+    "tcp_load_cog_mm": [0.0, 0.0, 90.0], "backstops_match": True,
+})
+_MAINT_CLEAR_OK = ArmMaintenanceResult(
+    arm_id="view", op="clear_errors", path="monitor", ok=True,
+    detail="errors cleared (C19 -> 0)",
+    sdk_codes={"clean_error": 0, "clean_warn": 0},  # never motion_enable
+    before=_MON_VIEW_ERROR, after=_MON_VIEW_CLEARED,
+)
+_MAINT_APPLY_WARN = ArmMaintenanceResult(
+    arm_id="view", op="apply_backstops", path="monitor", ok=True,
+    detail="safety settings applied (sensitivity 3, payload 0.55 kg)",
+    sdk_codes={  # backstops.apply_backstops order
+        "set_tcp_load": 0, "set_gravity_direction": 0, "set_collision_sensitivity": 0,
+        "set_self_collision_detection": 0, "set_collision_tool_model": 1,
+        "set_collision_rebound": 0,
+    },
+    warnings=["set_collision_tool_model returned 1"],
+    before=_MON_VIEW_CLEARED, after=_MON_VIEW_BACKSTOPS,
+)
+_MAINT_RECOVER_SESSION = ArmMaintenanceResult(
+    arm_id="grip", op="recover", path="session", ok=True,
+    detail="recovered - re-grip the clutch to continue",
+    sdk_codes={"clean_error": 0, "clean_warn": 0, "motion_enable": 0, "set_mode": 0,
+               "set_state": 0},
+)
+_MAINT_RECOVER_REFUSED = ArmMaintenanceResult(
+    arm_id="view", op="recover", path="monitor", ok=False, detail="recover needs a session",
+)
+
 _WIRE_MODELS: list[BaseModel] = [
     HelloMsg(epoch="ep0", session_id="s0", role="controller"),
     HelloMsg(epoch="ep0", session_id=None, role="observer"),
@@ -416,6 +470,27 @@ _WIRE_MODELS: list[BaseModel] = [
     ]),
     _HW_MONITOR,
     _HW_MONITOR_PAUSED,
+    # phase-09b error recovery (ArmTelemetry fault fields, monitor read-back, maintenance)
+    _ARM_FAULTED,
+    _ARM_RECOVERING,
+    _MON_VIEW_CLEARED,
+    _MON_VIEW_BACKSTOPS,
+    ArmMonitorTelemetry(arm_id="grip", status="running", maintenance_busy=True),
+    ArmMaintenanceRequest(op="clear_errors"),
+    ArmMaintenanceRequest(op="apply_backstops"),
+    ArmMaintenanceRequest(op="recover"),
+    ArmMaintenanceResult(arm_id="grip", op="clear_errors", path="monitor", ok=False,
+                         detail="monitor not connected"),
+    _MAINT_CLEAR_OK,
+    _MAINT_APPLY_WARN,
+    _MAINT_RECOVER_SESSION,
+    _MAINT_RECOVER_REFUSED,
+    TelemetryMsg(
+        seq=5, ts=16.0, epoch="ep0", active_arm="arm0", controller_connected=True,
+        arms=[_ARM_FAULTED], collision=CollisionReport.ok(), clearances=[],
+        episode=None, dagger=None, inference=None, session=SessionTelemetry(state="fault"),
+        hardware_monitor=_HW_MONITOR_PAUSED,
+    ),
     TelemetryMsg(
         seq=1,
         ts=12.0,
@@ -793,6 +868,9 @@ def test_arm_monitor_telemetry_fields_pinned_and_defaulted():
         "arm_id", "status", "detail", "seq", "age_s", "q", "tcp_pose",
         "rail_present", "rail_homed", "rail_enabled", "rail_pos_m", "rail_raw_mm",
         "gripper_open_frac", "gripper_raw", "error_code", "warn_code", "state", "mode",
+        # phase-09b read-back + maintenance flag
+        "collision_sensitivity", "tcp_load_kg", "tcp_load_cog_mm", "backstops_match",
+        "maintenance_busy",
     }
     required = {n for n, f in ArmMonitorTelemetry.model_fields.items() if f.is_required()}
     assert required == {"arm_id"}
@@ -803,6 +881,8 @@ def test_arm_monitor_telemetry_fields_pinned_and_defaulted():
     assert (off.rail_pos_m, off.rail_raw_mm) == (None, None)
     assert (off.gripper_open_frac, off.gripper_raw) == (None, None)
     assert (off.error_code, off.warn_code, off.state, off.mode) == (0, 0, None, None)
+    assert (off.collision_sensitivity, off.tcp_load_kg, off.backstops_match) == (None,) * 3
+    assert off.tcp_load_cog_mm == [] and off.maintenance_busy is False
     # Mutable list defaults are per-instance (pydantic copies them).
     other = ArmMonitorTelemetry(arm_id="grip")
     off.q.append(1.0)
@@ -968,6 +1048,166 @@ def test_camera_info_kind_gains_twin():
     parsed = WorkcellStatus.model_validate_json(status.model_dump_json())
     assert [c.kind for c in parsed.cameras] == ["v4l2", "twin"]
     assert [c.camera_id for c in parsed.cameras] == ["grip_wrist", "grip_wrist_align"]
+
+
+def test_arm_monitor_telemetry_backstops_readback_is_additive():
+    """phase-09b: the safety read-back + ``maintenance_busy`` default; pre-09b rows parse."""
+    legacy = _MON_VIEW_BACKSTOPS.model_dump(mode="json")
+    for key in ("collision_sensitivity", "tcp_load_kg", "tcp_load_cog_mm", "backstops_match",
+                "maintenance_busy"):
+        legacy.pop(key)
+    parsed = ArmMonitorTelemetry.model_validate(legacy)
+    assert parsed.collision_sensitivity is None and parsed.tcp_load_kg is None
+    assert parsed.tcp_load_cog_mm == [] and parsed.backstops_match is None
+    assert parsed.maintenance_busy is False
+    # Live 2026-09-04 read-back before "Apply safety settings": payload 0 kg, sensitivity 1
+    # on the Perception Arm -> runtime flags the mismatch; after: configured values match.
+    before = json.loads(_MON_VIEW_CLEARED.model_dump_json())
+    assert before["collision_sensitivity"] == 1 and before["tcp_load_kg"] == 0.0
+    assert before["tcp_load_cog_mm"] == [0.0, 0.0, 0.0] and before["backstops_match"] is False
+    assert before["error_code"] == 0 and before["maintenance_busy"] is False
+    after = json.loads(_MON_VIEW_BACKSTOPS.model_dump_json())
+    assert after["collision_sensitivity"] == 3 and after["tcp_load_kg"] == 0.55
+    assert after["tcp_load_cog_mm"] == [0.0, 0.0, 90.0] and after["backstops_match"] is True
+    assert ArmMonitorTelemetry.model_validate(after) == _MON_VIEW_BACKSTOPS
+    busy = ArmMonitorTelemetry(arm_id="grip", status="running", maintenance_busy=True)
+    assert json.loads(busy.model_dump_json())["maintenance_busy"] is True
+    # The read-back is what the controller reports (an int), never a float or a word.
+    with pytest.raises(ValidationError):
+        ArmMonitorTelemetry(arm_id="grip", collision_sensitivity=2.5)
+    with pytest.raises(ValidationError):
+        ArmMonitorTelemetry(arm_id="grip", collision_sensitivity="high")
+    with pytest.raises(ValidationError):
+        ArmMonitorTelemetry(arm_id="grip", tcp_load_cog_mm=["x", 0, 0])
+    with pytest.raises(ValidationError):
+        ArmMonitorTelemetry(arm_id="grip", maintenance_busy="later")
+    # Rides the block + the frame unchanged.
+    block = HardwareMonitorTelemetry(enabled=True, arms=[_MON_GRIP_RUNNING, _MON_VIEW_BACKSTOPS])
+    wire = json.loads(block.model_dump_json())
+    assert [a["backstops_match"] for a in wire["arms"]] == [None, True]
+    assert HardwareMonitorTelemetry.model_validate(wire) == block
+
+
+def test_arm_telemetry_fault_fields_are_additive():
+    """phase-09b: ``fault_detail`` / ``recovering`` default; pre-09b producers still parse."""
+    assert set(ArmTelemetry.model_fields) == {
+        "arm_id", "connected", "q", "rail_pos_m", "ee_pose", "gripper_open_frac",
+        "error_code", "warn_code", "stale", "goto", "fault_detail", "recovering",
+    }
+    required = {n for n, f in ArmTelemetry.model_fields.items() if f.is_required()}
+    assert required == {
+        "arm_id", "connected", "q", "rail_pos_m", "ee_pose", "gripper_open_frac", "error_code",
+    }
+    assert ArmTelemetry.model_fields["fault_detail"].default == ""
+    assert ArmTelemetry.model_fields["recovering"].default is False
+    legacy = _ARM.model_dump(mode="json")
+    legacy.pop("fault_detail")
+    legacy.pop("recovering")
+    parsed = ArmTelemetry.model_validate(legacy)
+    assert parsed.fault_detail == "" and parsed.recovering is False
+    assert parsed == _ARM
+    # FAULT: the controller code AND its SDK title; RECOVERING: code cleared, flag up until
+    # the operator re-grips the clutch (04-runtime §15).
+    faulted = json.loads(_ARM_FAULTED.model_dump_json())
+    assert faulted["error_code"] == 24 and faulted["recovering"] is False
+    assert faulted["fault_detail"] == "controller error 24: Speed Exceeds Limit"
+    assert faulted["goto"] is None
+    assert ArmTelemetry.model_validate(faulted) == _ARM_FAULTED
+    recovering = json.loads(_ARM_RECOVERING.model_dump_json())
+    assert recovering["error_code"] == 0 and recovering["recovering"] is True
+    assert recovering["fault_detail"] == faulted["fault_detail"]
+    with pytest.raises(ValidationError):
+        ArmTelemetry.model_validate({**faulted, "recovering": "soon"})
+    with pytest.raises(ValidationError):
+        ArmTelemetry.model_validate({**faulted, "fault_detail": 24})
+    # Nested in a frame whose session block reports the FAULT state.
+    frame = TelemetryMsg(
+        seq=6, ts=17.0, epoch="ep0", active_arm="arm0", controller_connected=True,
+        arms=[_ARM_FAULTED, _ARM], collision=CollisionReport.ok(), clearances=[],
+        episode=None, dagger=None, inference=None, session=SessionTelemetry(state="fault"),
+    )
+    wire = json.loads(frame.model_dump_json())
+    assert [a["fault_detail"] for a in wire["arms"]] == [faulted["fault_detail"], ""]
+    assert wire["session"]["state"] == "fault"
+    assert TelemetryMsg.model_validate(wire) == frame
+
+
+def test_arm_maintenance_models_pinned():
+    """phase-09b: POST /api/hardware/arms/{arm_id}/maintenance body + result, spelled exactly."""
+    assert get_args(ArmMaintenanceOp) == ("clear_errors", "apply_backstops", "recover")
+    assert get_args(MaintenancePath) == ("monitor", "session")
+    assert set(ArmMaintenanceRequest.model_fields) == {"op"}
+    assert ArmMaintenanceRequest.model_fields["op"].is_required()
+    assert ArmMaintenanceRequest.model_fields["op"].annotation == ArmMaintenanceOp
+    assert set(ArmMaintenanceResult.model_fields) == {
+        "arm_id", "op", "path", "ok", "detail", "sdk_codes", "warnings", "before", "after",
+    }
+    required = {n for n, f in ArmMaintenanceResult.model_fields.items() if f.is_required()}
+    assert required == {"arm_id", "op", "path", "ok"}
+    assert ArmMaintenanceResult.model_fields["op"].annotation == ArmMaintenanceOp
+    assert ArmMaintenanceResult.model_fields["path"].annotation == MaintenancePath
+    bare = ArmMaintenanceResult(arm_id="grip", op="clear_errors", path="monitor", ok=True)
+    assert bare.detail == "" and bare.sdk_codes == {} and bare.warnings == []
+    assert bare.before is None and bare.after is None
+    # Mutable defaults are per-instance (pydantic copies them).
+    other = ArmMaintenanceResult(arm_id="grip", op="clear_errors", path="monitor", ok=True)
+    bare.sdk_codes["clean_error"] = 0
+    bare.warnings.append("x")
+    assert other.sdk_codes == {} and other.warnings == []
+    # Vocabulary: SDK method names and anything motion-like are not ops.
+    for bad in ("clean_error", "home_rail", "enable", "apply", "CLEAR_ERRORS", ""):
+        with pytest.raises(ValidationError):
+            ArmMaintenanceRequest(op=bad)
+    for bad in ("rest", "driver", "MONITOR", ""):
+        with pytest.raises(ValidationError):
+            ArmMaintenanceResult(arm_id="grip", op="recover", path=bad, ok=True)
+    with pytest.raises(ValidationError):
+        ArmMaintenanceRequest()  # op is required
+    with pytest.raises(ValidationError):
+        ArmMaintenanceResult(arm_id="grip", op="recover", path="session")  # ok is required
+    with pytest.raises(ValidationError):
+        ArmMaintenanceResult(arm_id="grip", op="clear_errors", path="monitor", ok=True,
+                             sdk_codes={"clean_error": "ok"})
+    with pytest.raises(ValidationError):
+        ArmMaintenanceResult(arm_id="grip", op="clear_errors", path="monitor", ok=True,
+                             warnings=[1])
+    with pytest.raises(ValidationError):
+        ArmMaintenanceResult(arm_id="grip", op="clear_errors", path="monitor", ok=True,
+                             before={"status": "running"})  # arm_id required in the sample
+    # Body wire form is flat.
+    assert json.loads(ArmMaintenanceRequest(op="apply_backstops").model_dump_json()) == {
+        "op": "apply_backstops",
+    }
+    # clear_errors on the monitor path: exactly clean_error + clean_warn in call order, the
+    # before/after samples show C19 -> 0, and the op NEVER enabled motion.
+    clear = json.loads(_MAINT_CLEAR_OK.model_dump_json())
+    assert (clear["arm_id"], clear["op"], clear["path"], clear["ok"]) == (
+        "view", "clear_errors", "monitor", True,
+    )
+    assert list(clear["sdk_codes"]) == ["clean_error", "clean_warn"]
+    assert "motion_enable" not in clear["sdk_codes"] and clear["warnings"] == []
+    assert clear["before"]["error_code"] == 19 and clear["after"]["error_code"] == 0
+    assert clear["before"]["arm_id"] == clear["after"]["arm_id"] == "view"
+    assert ArmMaintenanceResult.model_validate(clear) == _MAINT_CLEAR_OK
+    # apply_backstops: the backstops.py call order, one non-fatal warning, read-back matches.
+    apply = json.loads(_MAINT_APPLY_WARN.model_dump_json())
+    assert list(apply["sdk_codes"]) == [
+        "set_tcp_load", "set_gravity_direction", "set_collision_sensitivity",
+        "set_self_collision_detection", "set_collision_tool_model", "set_collision_rebound",
+    ]
+    assert apply["ok"] is True and apply["warnings"] == ["set_collision_tool_model returned 1"]
+    assert apply["after"]["backstops_match"] is True and apply["after"]["tcp_load_kg"] == 0.55
+    assert apply["before"]["backstops_match"] is False
+    assert ArmMaintenanceResult.model_validate(apply) == _MAINT_APPLY_WARN
+    # recover: session path carries no monitor samples (the monitor is paused); refused on
+    # the monitor path with ok=False and the reason in detail.
+    recover = json.loads(_MAINT_RECOVER_SESSION.model_dump_json())
+    assert recover["path"] == "session" and recover["before"] is None
+    assert recover["after"] is None and "motion_enable" in recover["sdk_codes"]
+    assert ArmMaintenanceResult.model_validate(recover) == _MAINT_RECOVER_SESSION
+    refused = json.loads(_MAINT_RECOVER_REFUSED.model_dump_json())
+    assert refused["ok"] is False and refused["detail"] == "recover needs a session"
+    assert refused["sdk_codes"] == {} and refused["path"] == "monitor"
 
 
 def test_tracker_calibration_model_fields_pinned():

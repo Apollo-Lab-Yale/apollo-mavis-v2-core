@@ -3,6 +3,8 @@
   "models": [
     "AckMsg",
     "ActionMsg",
+    "ArmMaintenanceRequest",
+    "ArmMaintenanceResult",
     "ArmStatusInfo",
     "CameraInfo",
     "CollisionEvent",

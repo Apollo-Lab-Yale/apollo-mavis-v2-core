@@ -30,6 +30,12 @@ from .keymap import (
     KeymapEntry,
     axis_map,
 )
+from .maintenance import (
+    ArmMaintenanceOp,
+    ArmMaintenanceRequest,
+    ArmMaintenanceResult,
+    MaintenancePath,
+)
 from .microphone import MicrophoneInfo, MicStatus
 from .session import (
     START_FROM_RE,
@@ -138,6 +144,11 @@ __all__ = [
     "TwinOverlayStatus",
     "TwinOverlayTelemetry",
     "HardwareMonitorTelemetry",
+    # arm maintenance (phase-09b)
+    "ArmMaintenanceOp",
+    "MaintenancePath",
+    "ArmMaintenanceRequest",
+    "ArmMaintenanceResult",
     # video
     "HEADER_FMT",
     "HEADER_SIZE",

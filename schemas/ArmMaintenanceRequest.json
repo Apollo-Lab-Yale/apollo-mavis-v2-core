@@ -1,0 +1,19 @@
+{
+  "description": "``POST /api/hardware/arms/{arm_id}/maintenance`` body.",
+  "properties": {
+    "op": {
+      "enum": [
+        "clear_errors",
+        "apply_backstops",
+        "recover"
+      ],
+      "title": "Op",
+      "type": "string"
+    }
+  },
+  "required": [
+    "op"
+  ],
+  "title": "ArmMaintenanceRequest",
+  "type": "object"
+}
