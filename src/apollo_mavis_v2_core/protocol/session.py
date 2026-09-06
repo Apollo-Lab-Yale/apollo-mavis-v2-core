@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from apollo_mavis_v2_core.types import FrameRef, parse_frame
 
@@ -32,6 +32,9 @@ class SessionSpec(BaseModel):
     task: str | None = None  # dataset task string (collect/dagger: required)
     policy: str | None = None  # checkpoint id (dagger/inference); None = latest /
     #   promoted deploy ckpt (409 if none promoted — 12-dagger §9)
+    speed_scale: float = Field(1.0, gt=0, le=1)  # additive (phase-09c): multiplies the
+    #   host-side teleop / target-rate / jog / dq_max limits AND the driver-side servo /
+    #   Cartesian-step / rail-speed caps; 0 and > 1 are 422. Hardware tab default 0.1
 
     @field_validator("start_from")
     @classmethod
@@ -63,6 +66,11 @@ class SessionInfo(BaseModel):
     arms: list[str]
     streams: list[str]  # video ids: camera ids + "sim" and/or "twin"
     state: str  # SessionState value
+    kind: Literal["hardware", "sim"] = "sim"  # additive (phase-09c): which workcell the
+    #   session drives; defaults to "sim" because every pre-09c session was one (hardware
+    #   was 409), so the UI no longer infers it from hardware_monitor.paused
+    speed_scale: float = Field(1.0, gt=0, le=1)  # additive (phase-09c): echo of
+    #   SessionSpec.speed_scale (pre-09c producers ran unscaled)
 
 
 class ArmStatusInfo(BaseModel):

@@ -9,11 +9,19 @@ camera's viewpoint as a tinted overlay on the real frame (streams
 "twin"``, §12). The monitor never sends motion commands and writes nothing
 to a box unless the operator issues an explicit maintenance request
 (``protocol.maintenance``, phase-09b: clear errors / apply the controller-side
-safety parameters); a hardware session PAUSES it (connections released)
-instead of sharing a box between two SDK clients. This module is a
-dependency-free leaf (pure pydantic) so ``protocol.telemetry`` and
-``protocol.maintenance`` can import it without cycles; the models ride
-``TelemetryMsg``'s ``$defs`` (§14) and none exports top-level.
+safety parameters; phase-09c/09d: home the linear track, possibly after a
+twin-planned pre-positioning motion); a hardware session PAUSES it
+(connections released) instead of sharing a box between two SDK clients.
+
+This module is a dependency-free leaf (pure pydantic) so ``protocol.telemetry``
+and ``protocol.maintenance`` can import it without cycles. That is also why
+the maintenance-op vocabulary :data:`ArmMaintenanceOp` and the asynchronous
+job progress block :class:`MaintenanceProgress` / :data:`MaintenancePhase`
+are DEFINED here (phase-09d) and merely re-exported by ``protocol.maintenance``:
+the progress rides :attr:`ArmMonitorTelemetry.maintenance` while
+``protocol.maintenance`` embeds ``ArmMonitorTelemetry`` in its result, so
+defining them there would make the two modules import each other. The models
+ride ``TelemetryMsg``'s ``$defs`` (§14) and none exports top-level.
 """
 
 from __future__ import annotations
@@ -29,6 +37,57 @@ ArmMonitorStatus = Literal["off", "connecting", "running", "stale", "paused", "e
 # stale:      connected, but the last sample is older than stale_s
 # paused:     a hardware session owns the box - connection released (hand-over)
 # error:      connect / read failure (runtime retries with exponential backoff)
+
+ArmMaintenanceOp = Literal["clear_errors", "apply_backstops", "recover", "home_rail"]
+# The maintenance-op vocabulary of ``POST /api/hardware/arms/{arm_id}/maintenance``
+# (``protocol.maintenance`` documents each op and re-exports the name; it lives here
+# because MaintenanceProgress.op below needs it in the leaf - see the module docstring).
+
+MaintenancePhase = Literal[
+    "queued",
+    "sweeping",
+    "planning",
+    "connecting",
+    "positioning",
+    "homing",
+    "verifying",
+    "done",
+    "failed",
+]
+# Phases of an asynchronous maintenance job (phase-09d ``RailHomingJob``, one arm at a
+# time), in execution order:
+# queued       accepted (202) - the job thread has not started yet
+# sweeping     full-travel twin sweep at the arm's CURRENT posture (RailSweepChecker)
+# planning     twin RRT-Connect to a rail-safe posture + position-agnostic path check
+#              (every waypoint clear for EVERY rail position - the carriage is unknown)
+# connecting   monitor paused + joined; this arm's driver connected with the rail still
+#              unhomed, speed_scale 0.1; the other arm frozen at its last sample (09c D1)
+# positioning  the planned joint path executes under the gate (ControlLoop._op_execute_plan)
+# homing       driver.home_rail(): the carriage drives to the homing end, joints held
+# verifying    registers homed + enabled + no error and a monitor sample; the driver is
+#              torn down (state 4 + brakes -> the posture is HELD) and the monitor resumed
+# done/failed  terminal - the final ArmMaintenanceResult is at GET .../maintenance/last
+
+
+class MaintenanceProgress(BaseModel):
+    """Live progress of an asynchronous maintenance job on one arm (phase-09d).
+
+    Rides :attr:`ArmMonitorTelemetry.maintenance` while a ``RailHomingJob`` runs
+    (``None`` when no job exists) so the UI's Home-rail sheet can list the
+    phases as they happen. ``job_id`` matches the ``202`` response's
+    ``ArmMaintenanceResult.job_id``; ``progress`` is a coarse 0..1 estimate
+    (phase index, plus the waypoint fraction while ``positioning``);
+    ``started_at`` is unix seconds. How long a terminal ``done`` / ``failed``
+    stays visible is runtime territory (04-runtime §13.3); the final
+    ``ArmMaintenanceResult`` is fetched from ``GET .../maintenance/last``.
+    """
+
+    op: ArmMaintenanceOp
+    job_id: str
+    phase: MaintenancePhase
+    detail: str = ""  # operator-facing progress / failure reason
+    progress: float = 0.0  # 0..1 coarse estimate
+    started_at: float | None = None  # unix s
 
 
 class ArmMonitorTelemetry(BaseModel):
@@ -54,6 +113,11 @@ class ArmMonitorTelemetry(BaseModel):
     the arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of
     gravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is
     true while a maintenance op executes on this arm.
+
+    phase-09d (additive): ``maintenance`` is the live :class:`MaintenanceProgress`
+    of an asynchronous job (rail homing that first needs a planned
+    pre-positioning motion) on this arm, ``None`` when no job exists;
+    ``maintenance_busy`` stays true for the job's whole life.
     """
 
     arm_id: str
@@ -80,6 +144,7 @@ class ArmMonitorTelemetry(BaseModel):
     tcp_load_cog_mm: list[float] = []  # controller tcp_load centre of gravity [x, y, z] mm
     backstops_match: bool | None = None  # read-back == ArmConfig (runtime); None = not compared
     maintenance_busy: bool = False  # a maintenance op is executing on this arm
+    maintenance: MaintenanceProgress | None = None  # phase-09d async job progress (None = none)
 
 
 TwinOverlayStatus = Literal["off", "waiting", "live", "stale", "error"]
@@ -129,6 +194,9 @@ class HardwareMonitorTelemetry(BaseModel):
 
 __all__ = [
     "ArmMonitorStatus",
+    "ArmMaintenanceOp",
+    "MaintenancePhase",
+    "MaintenanceProgress",
     "ArmMonitorTelemetry",
     "TwinOverlayStatus",
     "TwinOverlayTelemetry",

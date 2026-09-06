@@ -1,11 +1,17 @@
 {
   "description": "``POST /api/hardware/arms/{arm_id}/maintenance`` body.",
   "properties": {
+    "dry_run": {
+      "default": false,
+      "title": "Dry Run",
+      "type": "boolean"
+    },
     "op": {
       "enum": [
         "clear_errors",
         "apply_backstops",
-        "recover"
+        "recover",
+        "home_rail"
       ],
       "title": "Op",
       "type": "string"

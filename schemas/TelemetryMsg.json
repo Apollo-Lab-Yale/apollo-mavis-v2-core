@@ -1,7 +1,42 @@
 {
   "$defs": {
+    "ArmBringupTelemetry": {
+      "description": "One hardware bring-up step of one arm (phase-09c; 04-runtime \u00a75).\n\nFed from the workcell's ``status_cb`` while ``SessionTelemetry.state`` is\n``bringup``; the Cockpit lists the rows until the session is running.\n``step`` names the stage (``network`` / ``connect`` / ``rail`` / ``gripper``\n/ ``report`` / ``frozen`` ...), ``detail`` the human-readable outcome, e.g.\n\"Perception Arm frozen at last sample\".",
+      "properties": {
+        "arm_id": {
+          "title": "Arm Id",
+          "type": "string"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "ok",
+            "warning",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "step": {
+          "title": "Step",
+          "type": "string"
+        }
+      },
+      "required": [
+        "arm_id",
+        "step",
+        "status"
+      ],
+      "title": "ArmBringupTelemetry",
+      "type": "object"
+    },
     "ArmMonitorTelemetry": {
-      "description": "One arm as seen by the read-only state monitor.\n\nEvery field but ``arm_id`` defaults so an arm the monitor never reached\nstill validates. ``q`` is the controller's 7 joint angles in radians,\ncontroller order - an IDENTITY mapping onto the twin's ``<arm>_joint1..7``\n(verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller flange\npose (``tcp_offset`` zero) in the arm base frame, ``[x, y, z]`` m followed\nby ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package).\n``rail_pos_m`` is filled only while the track reports homed (``on_zero ==\n1``) AND enabled - the raw register is meaningless otherwise - whereas\n``rail_raw_mm`` is always reported when the registers are readable.\n``gripper_open_frac`` is 0 closed .. 1 open (``None`` for gripper\n``\"none\"``); ``gripper_raw`` is the SDK reading for diagnosis.\n``error_code``/``warn_code`` are the controller's codes (e.g. 19 = End\nModule Communication Error); ``state`` 4 = stopped / not enabled.\n\nphase-09b read-back (slow poll, additive): ``collision_sensitivity`` /\n``tcp_load_kg`` / ``tcp_load_cog_mm`` are the controller's CURRENT\nsafety parameters; ``backstops_match`` is the runtime's comparison against\nthe arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of\ngravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is\ntrue while a maintenance op executes on this arm.",
+      "description": "One arm as seen by the read-only state monitor.\n\nEvery field but ``arm_id`` defaults so an arm the monitor never reached\nstill validates. ``q`` is the controller's 7 joint angles in radians,\ncontroller order - an IDENTITY mapping onto the twin's ``<arm>_joint1..7``\n(verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller flange\npose (``tcp_offset`` zero) in the arm base frame, ``[x, y, z]`` m followed\nby ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package).\n``rail_pos_m`` is filled only while the track reports homed (``on_zero ==\n1``) AND enabled - the raw register is meaningless otherwise - whereas\n``rail_raw_mm`` is always reported when the registers are readable.\n``gripper_open_frac`` is 0 closed .. 1 open (``None`` for gripper\n``\"none\"``); ``gripper_raw`` is the SDK reading for diagnosis.\n``error_code``/``warn_code`` are the controller's codes (e.g. 19 = End\nModule Communication Error); ``state`` 4 = stopped / not enabled.\n\nphase-09b read-back (slow poll, additive): ``collision_sensitivity`` /\n``tcp_load_kg`` / ``tcp_load_cog_mm`` are the controller's CURRENT\nsafety parameters; ``backstops_match`` is the runtime's comparison against\nthe arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of\ngravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is\ntrue while a maintenance op executes on this arm.\n\nphase-09d (additive): ``maintenance`` is the live :class:`MaintenanceProgress`\nof an asynchronous job (rail homing that first needs a planned\npre-positioning motion) on this arm, ``None`` when no job exists;\n``maintenance_busy`` stays true for the job's whole life.",
       "properties": {
         "age_s": {
           "anyOf": [
@@ -76,6 +111,17 @@
           ],
           "default": null,
           "title": "Gripper Raw"
+        },
+        "maintenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MaintenanceProgress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "maintenance_busy": {
           "default": false,
@@ -878,6 +924,69 @@
       "title": "LighthouseStatus",
       "type": "object"
     },
+    "MaintenanceProgress": {
+      "description": "Live progress of an asynchronous maintenance job on one arm (phase-09d).\n\nRides :attr:`ArmMonitorTelemetry.maintenance` while a ``RailHomingJob`` runs\n(``None`` when no job exists) so the UI's Home-rail sheet can list the\nphases as they happen. ``job_id`` matches the ``202`` response's\n``ArmMaintenanceResult.job_id``; ``progress`` is a coarse 0..1 estimate\n(phase index, plus the waypoint fraction while ``positioning``);\n``started_at`` is unix seconds. How long a terminal ``done`` / ``failed``\nstays visible is runtime territory (04-runtime \u00a713.3); the final\n``ArmMaintenanceResult`` is fetched from ``GET .../maintenance/last``.",
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "clear_errors",
+            "apply_backstops",
+            "recover",
+            "home_rail"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "queued",
+            "sweeping",
+            "planning",
+            "connecting",
+            "positioning",
+            "homing",
+            "verifying",
+            "done",
+            "failed"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "progress": {
+          "default": 0.0,
+          "title": "Progress",
+          "type": "number"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        }
+      },
+      "required": [
+        "op",
+        "job_id",
+        "phase"
+      ],
+      "title": "MaintenanceProgress",
+      "type": "object"
+    },
     "MicrophoneTelemetry": {
       "description": "Microphone block (phase-11; 04-runtime \u00a713.3), additive.\n\nEvery field defaults so a producer without a microphone still validates.\nOne frame per telemetry tick (frame length = ``sample_rate / telemetry_hz``,\n1920 samples at 48 kHz / 25 Hz); the UI de-duplicates on ``seq``.\n``env_min``/``env_max`` are the per-bin min/max envelope of the frame as 64\nint8 values (-127..127, time-ordered) for the scrolling oscilloscope,\nquantised RELATIVE TO THE FRAME PEAK (the loudest sample maps to +-127, so a\nquiet room keeps its shape); absolute = ``env / 127 * 10 ** (peak_dbfs /\n20)``. ``rms_dbfs``/``peak_dbfs`` are full-scale levels (0 dBFS = |1.0|),\n``None`` when no frame has arrived. ``status`` shares ``MicStatus`` with\n``MicrophoneInfo`` (\u00a712).",
       "properties": {
@@ -1036,6 +1145,21 @@
     "SessionTelemetry": {
       "description": "Additive session-lifecycle block (04-runtime \u00a713.3).",
       "properties": {
+        "bringup": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ArmBringupTelemetry"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bringup"
+        },
         "plan_status": {
           "anyOf": [
             {

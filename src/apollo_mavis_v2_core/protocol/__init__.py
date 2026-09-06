@@ -35,6 +35,11 @@ from .maintenance import (
     ArmMaintenanceRequest,
     ArmMaintenanceResult,
     MaintenancePath,
+    MaintenancePhase,
+    MaintenanceProgress,
+    MaintenanceStatus,
+    PrePositionPlan,
+    RailSweepVerdict,
 )
 from .microphone import MicrophoneInfo, MicStatus
 from .session import (
@@ -50,6 +55,7 @@ from .session import (
     WorkcellStatus,
 )
 from .telemetry import (
+    ArmBringupTelemetry,
     ArmTelemetry,
     ClearanceItem,
     ControllerTelemetry,
@@ -108,6 +114,7 @@ __all__ = [
     "EpisodeStatus",
     "DaggerStatus",
     "InferenceStatus",
+    "ArmBringupTelemetry",
     "SessionTelemetry",
     "TrackerSettingsMsg",
     "ControllerTelemetry",
@@ -144,11 +151,18 @@ __all__ = [
     "TwinOverlayStatus",
     "TwinOverlayTelemetry",
     "HardwareMonitorTelemetry",
-    # arm maintenance (phase-09b)
+    # arm maintenance (phase-09b; home_rail + RailSweepVerdict phase-09c; the async
+    # RailHomingJob models phase-09d - MaintenanceProgress / MaintenancePhase /
+    # ArmMaintenanceOp are defined in .hardware_monitor and re-exported by .maintenance)
     "ArmMaintenanceOp",
     "MaintenancePath",
+    "MaintenanceStatus",
+    "MaintenancePhase",
     "ArmMaintenanceRequest",
+    "PrePositionPlan",
+    "RailSweepVerdict",
     "ArmMaintenanceResult",
+    "MaintenanceProgress",
     # video
     "HEADER_FMT",
     "HEADER_SIZE",

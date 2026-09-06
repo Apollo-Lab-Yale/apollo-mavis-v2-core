@@ -44,7 +44,7 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "TrackerSettingsArgs": control.TrackerSettingsArgs,
     # telemetry (§11; embeds sub-models incl. TrackerTelemetry,
     # MicrophoneTelemetry and HardwareMonitorTelemetry / ArmMonitorTelemetry /
-    # TwinOverlayTelemetry via $defs)
+    # MaintenanceProgress / TwinOverlayTelemetry via $defs)
     "TelemetryMsg": telemetry.TelemetryMsg,
     # tracker calibration (§12; REST /api/tracker/calibration — the other
     # protocol.tracker models ride TelemetryMsg / TrackerCalibrationStatus $defs)
@@ -62,7 +62,8 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     # microphone (§12; REST /api/microphones — phase-11)
     "MicrophoneInfo": microphone.MicrophoneInfo,
     # arm maintenance (§12; REST POST /api/hardware/arms/{arm_id}/maintenance —
-    # phase-09b; the result embeds ArmMonitorTelemetry via $defs)
+    # phase-09b; the result embeds ArmMonitorTelemetry (+ MaintenanceProgress),
+    # RailSweepVerdict and PrePositionPlan via $defs)
     "ArmMaintenanceRequest": maintenance.ArmMaintenanceRequest,
     "ArmMaintenanceResult": maintenance.ArmMaintenanceResult,
     # misc (§8, §13, §6)

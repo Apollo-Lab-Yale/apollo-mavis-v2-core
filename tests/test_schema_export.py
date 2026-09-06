@@ -403,6 +403,8 @@ def test_telemetry_schema_embeds_hardware_monitor_block(tmp_path):
         # phase-09b read-back + maintenance flag
         "collision_sensitivity", "tcp_load_kg", "tcp_load_cog_mm", "backstops_match",
         "maintenance_busy",
+        # phase-09d async maintenance job progress
+        "maintenance",
     }
     assert arm["required"] == ["arm_id"]
     assert arm["properties"]["arm_id"] == {"type": "string", "title": "Arm Id"}
@@ -438,6 +440,11 @@ def test_telemetry_schema_embeds_hardware_monitor_block(tmp_path):
     assert arm["properties"]["maintenance_busy"] == {
         "type": "boolean", "default": False, "title": "Maintenance Busy",
     }
+    # phase-09d: the async job progress is a nullable, defaulted sub-model on the same $defs.
+    progress = arm["properties"]["maintenance"]
+    assert {"$ref": "#/$defs/MaintenanceProgress"} in progress["anyOf"]
+    assert {"type": "null"} in progress["anyOf"] and progress["default"] is None
+    assert "MaintenanceProgress" in telemetry["$defs"]
 
     overlay = telemetry["$defs"]["TwinOverlayTelemetry"]
     assert set(overlay["properties"]) == {
@@ -465,13 +472,15 @@ def test_telemetry_schema_embeds_hardware_monitor_block(tmp_path):
     fallback = overlay["properties"]["rail_fallback_m"]
     assert {"type": "number"} in fallback["anyOf"] and {"type": "null"} in fallback["anyOf"]
     assert fallback["default"] is None
-    # None of the three exports top-level (EXPORTED_MODELS unchanged; contract §1).
+    # None of the four exports top-level (EXPORTED_MODELS unchanged; contract §1).
     index = json.loads((out / "index.json").read_text())
     assert not {
         "HardwareMonitorTelemetry", "ArmMonitorTelemetry", "TwinOverlayTelemetry",
+        "MaintenanceProgress",
     } & set(index["models"])
     assert not {
         "HardwareMonitorTelemetry.json", "ArmMonitorTelemetry.json", "TwinOverlayTelemetry.json",
+        "MaintenanceProgress.json",
     } & {p.name for p in out.iterdir()}
 
 
@@ -521,20 +530,28 @@ def test_telemetry_schema_arm_telemetry_gains_fault_fields(tmp_path):
 
 def test_arm_maintenance_schemas(tmp_path):
     """phase-09b: the maintenance body + result export top-level; the result nests
-    ArmMonitorTelemetry (same class as TelemetryMsg's $defs)."""
+    ArmMonitorTelemetry (same class as TelemetryMsg's $defs). phase-09c adds the
+    ``home_rail`` op, the ``dry_run`` flag and the nested ``RailSweepVerdict``; phase-09d
+    ``status`` / ``job_id`` and the nested ``PrePositionPlan`` / ``MaintenanceProgress``."""
     out = tmp_path / "schemas"
     export(out)
     request = json.loads((out / "ArmMaintenanceRequest.json").read_text())
-    assert set(request["properties"]) == {"op"}
+    assert set(request["properties"]) == {"op", "dry_run"}
     assert request["required"] == ["op"]
     assert request["properties"]["op"] == {
-        "type": "string", "enum": ["clear_errors", "apply_backstops", "recover"], "title": "Op",
+        "type": "string", "enum": ["clear_errors", "apply_backstops", "recover", "home_rail"],
+        "title": "Op",
+    }
+    assert request["properties"]["dry_run"] == {
+        "type": "boolean", "default": False, "title": "Dry Run",
     }
     assert "$defs" not in request  # flat body
 
     result = json.loads((out / "ArmMaintenanceResult.json").read_text())
     assert set(result["properties"]) == {
         "arm_id", "op", "path", "ok", "detail", "sdk_codes", "warnings", "before", "after",
+        "rail_sweep",
+        "status", "job_id",  # phase-09d
     }
     assert set(result["required"]) == {"arm_id", "op", "path", "ok"}
     assert result["properties"]["arm_id"] == {"type": "string", "title": "Arm Id"}
@@ -562,6 +579,179 @@ def test_arm_maintenance_schemas(tmp_path):
     assert {"collision_sensitivity", "tcp_load_kg", "backstops_match", "maintenance_busy"} <= set(
         result["$defs"]["ArmMonitorTelemetry"]["properties"]
     )
-    assert set(result["$defs"]) == {"ArmMonitorTelemetry"}  # nothing else nests
+    # phase-09c: the sweep verdict rides the result's $defs (not a top-level export).
+    sweep = result["properties"]["rail_sweep"]
+    assert {"$ref": "#/$defs/RailSweepVerdict"} in sweep["anyOf"]
+    assert {"type": "null"} in sweep["anyOf"] and sweep["default"] is None
+    assert set(result["$defs"]) == {
+        "ArmMonitorTelemetry", "RailSweepVerdict",
+        "PrePositionPlan", "MaintenanceProgress",  # phase-09d (via the verdict / monitor row)
+    }
+    verdict = result["$defs"]["RailSweepVerdict"]
+    assert set(verdict["properties"]) == {
+        "scene_id", "inflation_m", "step_m", "travel_m", "clear",
+        "first_blocked_m", "first_blocked_pair",
+        "min_clearance_m", "min_clearance_at_m", "min_clearance_pair",
+        "q_checked", "other_arms", "assumptions", "sample_seq",
+        "pre_position",  # phase-09d
+    }
+    assert set(verdict["required"]) == {"scene_id", "inflation_m", "step_m", "clear"}
+    assert verdict["properties"]["travel_m"] == {
+        "type": "number", "default": 0.65, "title": "Travel M",
+    }
+    assert verdict["properties"]["clear"] == {"type": "boolean", "title": "Clear"}
+    for key, title in (("first_blocked_m", "First Blocked M"),
+                       ("min_clearance_m", "Min Clearance M"),
+                       ("min_clearance_at_m", "Min Clearance At M")):
+        prop = verdict["properties"][key]
+        assert {"type": "number"} in prop["anyOf"] and {"type": "null"} in prop["anyOf"], key
+        assert prop["default"] is None and prop["title"] == title, key
+    for key in ("first_blocked_pair", "min_clearance_pair", "assumptions"):
+        assert verdict["properties"][key]["type"] == "array", key
+        assert verdict["properties"][key]["items"] == {"type": "string"}, key
+        assert verdict["properties"][key]["default"] == [], key
+    assert verdict["properties"]["q_checked"] == {
+        "type": "array", "items": {"type": "number"}, "default": [], "title": "Q Checked",
+    }
+    assert verdict["properties"]["other_arms"] == {
+        "type": "object", "additionalProperties": {"type": "array", "items": {"type": "number"}},
+        "default": {}, "title": "Other Arms",
+    }
+    assert verdict["properties"]["sample_seq"] == {
+        "type": "integer", "default": 0, "title": "Sample Seq",
+    }
     index = json.loads((out / "index.json").read_text())
     assert {"ArmMaintenanceRequest", "ArmMaintenanceResult"} <= set(index["models"])
+    assert "RailSweepVerdict" not in index["models"]
+    assert not (out / "RailSweepVerdict.json").exists()
+
+
+def test_home_rail_planning_schemas(tmp_path):
+    """phase-09d: the result gains ``status`` / ``job_id``; PrePositionPlan rides
+    RailSweepVerdict.pre_position and MaintenanceProgress rides ArmMonitorTelemetry.maintenance -
+    both nested (never top-level), both nullable with default None."""
+    out = tmp_path / "schemas"
+    export(out)
+    result = json.loads((out / "ArmMaintenanceResult.json").read_text())
+    assert result["properties"]["status"] == {
+        "type": "string", "enum": ["done", "accepted", "refused"], "default": "done",
+        "title": "Status",
+    }
+    job_id = result["properties"]["job_id"]
+    assert {"type": "string"} in job_id["anyOf"] and {"type": "null"} in job_id["anyOf"]
+    assert job_id["default"] is None and job_id["title"] == "Job Id"
+    assert not {"status", "job_id"} & set(result["required"])  # additive
+    verdict = result["$defs"]["RailSweepVerdict"]
+    pre = verdict["properties"]["pre_position"]
+    assert {"$ref": "#/$defs/PrePositionPlan"} in pre["anyOf"]
+    assert {"type": "null"} in pre["anyOf"] and pre["default"] is None
+    assert "pre_position" not in verdict["required"]
+    plan = result["$defs"]["PrePositionPlan"]
+    assert set(plan["properties"]) == {
+        "needed", "source", "target_q", "waypoints", "duration_s", "checked_rail_positions",
+        "clear", "detail",
+    }
+    assert plan["required"] == ["needed"]
+    assert plan["properties"]["needed"] == {"type": "boolean", "title": "Needed"}
+    assert plan["properties"]["source"] == {
+        "type": "string", "enum": ["current", "keyframe", "home", "search"],
+        "default": "current", "title": "Source",
+    }
+    assert plan["properties"]["target_q"] == {
+        "type": "array", "items": {"type": "number"}, "default": [], "title": "Target Q",
+    }
+    for key, title in (("waypoints", "Waypoints"),
+                       ("checked_rail_positions", "Checked Rail Positions")):
+        assert plan["properties"][key] == {"type": "integer", "default": 0, "title": title}, key
+    assert plan["properties"]["duration_s"] == {
+        "type": "number", "default": 0.0, "title": "Duration S",
+    }
+    assert plan["properties"]["clear"] == {"type": "boolean", "default": True, "title": "Clear"}
+    assert plan["properties"]["detail"] == {"type": "string", "default": "", "title": "Detail"}
+    # MaintenanceProgress: one class, byte-identical in the result's nested monitor row and in
+    # TelemetryMsg; op shares the request's vocabulary, phase is the job's ordered enum.
+    telemetry = json.loads((out / "TelemetryMsg.json").read_text())
+    progress = telemetry["$defs"]["MaintenanceProgress"]
+    assert result["$defs"]["MaintenanceProgress"] == progress
+    assert set(progress["properties"]) == {
+        "op", "job_id", "phase", "detail", "progress", "started_at",
+    }
+    assert progress["required"] == ["op", "job_id", "phase"]
+    assert progress["properties"]["op"] == result["properties"]["op"]
+    assert progress["properties"]["phase"] == {
+        "type": "string",
+        "enum": ["queued", "sweeping", "planning", "connecting", "positioning",
+                 "homing", "verifying", "done", "failed"],
+        "title": "Phase",
+    }
+    assert progress["properties"]["job_id"] == {"type": "string", "title": "Job Id"}
+    assert progress["properties"]["detail"] == {"type": "string", "default": "", "title": "Detail"}
+    assert progress["properties"]["progress"] == {
+        "type": "number", "default": 0.0, "title": "Progress",
+    }
+    started = progress["properties"]["started_at"]
+    assert {"type": "number"} in started["anyOf"] and {"type": "null"} in started["anyOf"]
+    assert started["default"] is None
+    # The nested monitor row in the result carries the field too (same class as TelemetryMsg).
+    row = result["$defs"]["ArmMonitorTelemetry"]["properties"]["maintenance"]
+    assert {"$ref": "#/$defs/MaintenanceProgress"} in row["anyOf"] and row["default"] is None
+    # Neither exports top-level (EXPORTED_MODELS unchanged; contract §1).
+    index = json.loads((out / "index.json").read_text())
+    assert not {"PrePositionPlan", "MaintenanceProgress"} & set(index["models"])
+    assert not {"PrePositionPlan.json", "MaintenanceProgress.json"} & {
+        p.name for p in out.iterdir()
+    }
+
+
+def test_session_spec_and_info_speed_scale_schema(tmp_path):
+    """phase-09c (D2): SessionSpec.speed_scale is (0, 1] with default 1.0; SessionInfo echoes
+    it and the workcell kind, both defaulted (additive)."""
+    out = tmp_path / "schemas"
+    export(out)
+    spec = json.loads((out / "SessionSpec.json").read_text())
+    assert spec["properties"]["speed_scale"] == {
+        "type": "number", "default": 1.0, "exclusiveMinimum": 0, "maximum": 1,
+        "title": "Speed Scale",
+    }
+    assert "speed_scale" not in spec["required"]
+    assert spec["required"] == ["mode", "kind", "arms", "frames"]
+    info = json.loads((out / "SessionInfo.json").read_text())
+    assert set(info["properties"]) == {
+        "session_id", "epoch", "mode", "arms", "streams", "state", "kind", "speed_scale",
+    }
+    assert set(info["required"]) == {"session_id", "epoch", "mode", "arms", "streams", "state"}
+    assert info["properties"]["kind"] == {
+        "type": "string", "enum": ["hardware", "sim"], "default": "sim", "title": "Kind",
+    }
+    assert info["properties"]["kind"]["enum"] == spec["properties"]["kind"]["enum"]
+    assert info["properties"]["speed_scale"] == spec["properties"]["speed_scale"]
+    assert "$defs" not in info  # flat response
+
+
+def test_telemetry_schema_session_bringup_rows(tmp_path):
+    """phase-09c (D5): ArmBringupTelemetry rides TelemetryMsg's $defs via
+    SessionTelemetry.bringup (nullable list, default None)."""
+    out = tmp_path / "schemas"
+    export(out)
+    telemetry = json.loads((out / "TelemetryMsg.json").read_text())
+    assert "ArmBringupTelemetry" in telemetry["$defs"]
+    session = telemetry["$defs"]["SessionTelemetry"]
+    assert set(session["properties"]) == {
+        "state", "start_from_progress", "plan_status", "trainer_alive", "bringup",
+    }
+    assert session["required"] == ["state"]
+    bringup = session["properties"]["bringup"]
+    assert {"type": "array", "items": {"$ref": "#/$defs/ArmBringupTelemetry"}} in bringup["anyOf"]
+    assert {"type": "null"} in bringup["anyOf"] and bringup["default"] is None
+    row = telemetry["$defs"]["ArmBringupTelemetry"]
+    assert set(row["properties"]) == {"arm_id", "step", "status", "detail"}
+    assert row["required"] == ["arm_id", "step", "status"]
+    assert row["properties"]["status"] == {
+        "type": "string", "enum": ["pending", "ok", "warning", "error"], "title": "Status",
+    }
+    assert row["properties"]["step"] == {"type": "string", "title": "Step"}
+    assert row["properties"]["detail"] == {"type": "string", "default": "", "title": "Detail"}
+    # Not a top-level export (EXPORTED_MODELS unchanged; contract §1).
+    index = json.loads((out / "index.json").read_text())
+    assert "ArmBringupTelemetry" not in index["models"]
+    assert not (out / "ArmBringupTelemetry.json").exists()

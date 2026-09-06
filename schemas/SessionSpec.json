@@ -69,6 +69,13 @@
       "default": null,
       "title": "Sim Scene"
     },
+    "speed_scale": {
+      "default": 1.0,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Speed Scale",
+      "type": "number"
+    },
     "start_from": {
       "default": "keep_current",
       "title": "Start From",

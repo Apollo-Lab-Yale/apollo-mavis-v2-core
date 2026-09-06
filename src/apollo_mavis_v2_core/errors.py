@@ -76,6 +76,19 @@ class RailExpectedError(BringupError):
     """expect_rail says yes/no but detection disagreed."""
 
 
+class RailNotHomedError(BringupError):
+    """Linear track detected but not homed (``on_zero == 0``): position unknown.
+
+    Raised by the hardware driver at connect (phase-09c: connect NEVER homes);
+    the digital twin cannot gate an arm whose carriage position is unknown, so
+    the hardware session is refused and the operator homes from the UI
+    (``home_rail`` maintenance op). ``step`` defaults to ``"rail"``.
+    """
+
+    def __init__(self, step: str = "rail", message: str = ""):
+        super().__init__(step, message)
+
+
 class GripperInitError(BringupError):
     """Gripper enable/initialization failed."""
 

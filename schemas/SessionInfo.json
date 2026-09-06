@@ -12,6 +12,15 @@
       "title": "Epoch",
       "type": "string"
     },
+    "kind": {
+      "default": "sim",
+      "enum": [
+        "hardware",
+        "sim"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
     "mode": {
       "enum": [
         "teleop",
@@ -25,6 +34,13 @@
     "session_id": {
       "title": "Session Id",
       "type": "string"
+    },
+    "speed_scale": {
+      "default": 1.0,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Speed Scale",
+      "type": "number"
     },
     "state": {
       "title": "State",

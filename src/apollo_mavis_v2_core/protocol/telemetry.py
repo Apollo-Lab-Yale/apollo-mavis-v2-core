@@ -88,6 +88,22 @@ class InferenceStatus(BaseModel):
     policy_version: str | None
 
 
+class ArmBringupTelemetry(BaseModel):
+    """One hardware bring-up step of one arm (phase-09c; 04-runtime §5).
+
+    Fed from the workcell's ``status_cb`` while ``SessionTelemetry.state`` is
+    ``bringup``; the Cockpit lists the rows until the session is running.
+    ``step`` names the stage (``network`` / ``connect`` / ``rail`` / ``gripper``
+    / ``report`` / ``frozen`` ...), ``detail`` the human-readable outcome, e.g.
+    "Perception Arm frozen at last sample".
+    """
+
+    arm_id: str
+    step: str  # bring-up stage name
+    status: Literal["pending", "ok", "warning", "error"]
+    detail: str = ""  # human-readable outcome / reason
+
+
 class SessionTelemetry(BaseModel):
     """Additive session-lifecycle block (04-runtime §13.3)."""
 
@@ -95,6 +111,8 @@ class SessionTelemetry(BaseModel):
     start_from_progress: float | None = None  # 0-1 during START_FROM
     plan_status: str | None = None
     trainer_alive: bool | None = None
+    bringup: list[ArmBringupTelemetry] | None = None  # additive (phase-09c): hardware
+    #   bring-up progress per arm/step; None for sim sessions and once cleared
 
 
 class TrackerSettingsMsg(BaseModel):
@@ -229,6 +247,7 @@ __all__ = [
     "EpisodeStatus",
     "DaggerStatus",
     "InferenceStatus",
+    "ArmBringupTelemetry",
     "SessionTelemetry",
     "TrackerSettingsMsg",
     "ControllerTelemetry",

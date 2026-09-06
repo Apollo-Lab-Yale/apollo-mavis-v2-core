@@ -1,7 +1,7 @@
 {
   "$defs": {
     "ArmMonitorTelemetry": {
-      "description": "One arm as seen by the read-only state monitor.\n\nEvery field but ``arm_id`` defaults so an arm the monitor never reached\nstill validates. ``q`` is the controller's 7 joint angles in radians,\ncontroller order - an IDENTITY mapping onto the twin's ``<arm>_joint1..7``\n(verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller flange\npose (``tcp_offset`` zero) in the arm base frame, ``[x, y, z]`` m followed\nby ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package).\n``rail_pos_m`` is filled only while the track reports homed (``on_zero ==\n1``) AND enabled - the raw register is meaningless otherwise - whereas\n``rail_raw_mm`` is always reported when the registers are readable.\n``gripper_open_frac`` is 0 closed .. 1 open (``None`` for gripper\n``\"none\"``); ``gripper_raw`` is the SDK reading for diagnosis.\n``error_code``/``warn_code`` are the controller's codes (e.g. 19 = End\nModule Communication Error); ``state`` 4 = stopped / not enabled.\n\nphase-09b read-back (slow poll, additive): ``collision_sensitivity`` /\n``tcp_load_kg`` / ``tcp_load_cog_mm`` are the controller's CURRENT\nsafety parameters; ``backstops_match`` is the runtime's comparison against\nthe arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of\ngravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is\ntrue while a maintenance op executes on this arm.",
+      "description": "One arm as seen by the read-only state monitor.\n\nEvery field but ``arm_id`` defaults so an arm the monitor never reached\nstill validates. ``q`` is the controller's 7 joint angles in radians,\ncontroller order - an IDENTITY mapping onto the twin's ``<arm>_joint1..7``\n(verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller flange\npose (``tcp_offset`` zero) in the arm base frame, ``[x, y, z]`` m followed\nby ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package).\n``rail_pos_m`` is filled only while the track reports homed (``on_zero ==\n1``) AND enabled - the raw register is meaningless otherwise - whereas\n``rail_raw_mm`` is always reported when the registers are readable.\n``gripper_open_frac`` is 0 closed .. 1 open (``None`` for gripper\n``\"none\"``); ``gripper_raw`` is the SDK reading for diagnosis.\n``error_code``/``warn_code`` are the controller's codes (e.g. 19 = End\nModule Communication Error); ``state`` 4 = stopped / not enabled.\n\nphase-09b read-back (slow poll, additive): ``collision_sensitivity`` /\n``tcp_load_kg`` / ``tcp_load_cog_mm`` are the controller's CURRENT\nsafety parameters; ``backstops_match`` is the runtime's comparison against\nthe arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of\ngravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is\ntrue while a maintenance op executes on this arm.\n\nphase-09d (additive): ``maintenance`` is the live :class:`MaintenanceProgress`\nof an asynchronous job (rail homing that first needs a planned\npre-positioning motion) on this arm, ``None`` when no job exists;\n``maintenance_busy`` stays true for the job's whole life.",
       "properties": {
         "age_s": {
           "anyOf": [
@@ -76,6 +76,17 @@
           ],
           "default": null,
           "title": "Gripper Raw"
+        },
+        "maintenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MaintenanceProgress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "maintenance_busy": {
           "default": false,
@@ -231,9 +242,259 @@
       ],
       "title": "ArmMonitorTelemetry",
       "type": "object"
+    },
+    "MaintenanceProgress": {
+      "description": "Live progress of an asynchronous maintenance job on one arm (phase-09d).\n\nRides :attr:`ArmMonitorTelemetry.maintenance` while a ``RailHomingJob`` runs\n(``None`` when no job exists) so the UI's Home-rail sheet can list the\nphases as they happen. ``job_id`` matches the ``202`` response's\n``ArmMaintenanceResult.job_id``; ``progress`` is a coarse 0..1 estimate\n(phase index, plus the waypoint fraction while ``positioning``);\n``started_at`` is unix seconds. How long a terminal ``done`` / ``failed``\nstays visible is runtime territory (04-runtime \u00a713.3); the final\n``ArmMaintenanceResult`` is fetched from ``GET .../maintenance/last``.",
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "clear_errors",
+            "apply_backstops",
+            "recover",
+            "home_rail"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "queued",
+            "sweeping",
+            "planning",
+            "connecting",
+            "positioning",
+            "homing",
+            "verifying",
+            "done",
+            "failed"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "progress": {
+          "default": 0.0,
+          "title": "Progress",
+          "type": "number"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        }
+      },
+      "required": [
+        "op",
+        "job_id",
+        "phase"
+      ],
+      "title": "MaintenanceProgress",
+      "type": "object"
+    },
+    "PrePositionPlan": {
+      "description": "Twin-planned pre-positioning motion that makes ``home_rail`` possible (phase-09d).\n\nRides :attr:`RailSweepVerdict.pre_position`. ``needed`` is ``False`` when\nthe arm's CURRENT posture is already sweep-clear (the rail homes with the\njoints untouched, 09c path). Otherwise the runtime tries candidate postures\nin order (``source``: the scene keyframe's 7 joints for this arm, then the\n``<arm>_home`` keyframe; ``\"search\"`` is reserved for a sampled posture\naround a candidate and is not produced in phase-09d) and keeps the first\nthat is sweep-clear over the full travel AND reachable by a twin RRT-Connect\nplan from the current posture whose EVERY waypoint is collision-free for\nEVERY rail position (``checked_rail_positions`` = 131 at 5 mm steps - the\ncarriage is unknown, so the path must be position-agnostic; this check is\nthe ONLY safety basis of the motion). ``clear`` is that verdict;\n``needed and not clear`` means no plan was found and the op is refused\n(``detail`` tells the operator what to do, e.g. fold the arm toward the\nfactory-zero posture in Studio and retry). ``duration_s`` is the estimated\nexecution time at ``speed_scale`` 0.1 so the UI can say \"~X s\".",
+      "properties": {
+        "checked_rail_positions": {
+          "default": 0,
+          "title": "Checked Rail Positions",
+          "type": "integer"
+        },
+        "clear": {
+          "default": true,
+          "title": "Clear",
+          "type": "boolean"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "duration_s": {
+          "default": 0.0,
+          "title": "Duration S",
+          "type": "number"
+        },
+        "needed": {
+          "title": "Needed",
+          "type": "boolean"
+        },
+        "source": {
+          "default": "current",
+          "enum": [
+            "current",
+            "keyframe",
+            "home",
+            "search"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "target_q": {
+          "default": [],
+          "items": {
+            "type": "number"
+          },
+          "title": "Target Q",
+          "type": "array"
+        },
+        "waypoints": {
+          "default": 0,
+          "title": "Waypoints",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "needed"
+      ],
+      "title": "PrePositionPlan",
+      "type": "object"
+    },
+    "RailSweepVerdict": {
+      "description": "Digital-twin rail sweep that gates ``home_rail`` (phase-09c).\n\nThe carriage position is UNKNOWN while the track is unhomed, so the runtime\nsweeps the full travel: it poses the twin at the arm's current 7 joints\n(``q_checked``), the other arm(s) at their last monitor sample\n(``other_arms``: q7 + rail position, ``rail_fallback_m`` when the rail is\nunknown \u2014 recorded in ``assumptions``), and steps the target arm's rail\nslot from 0 to ``travel_m`` in ``step_m`` increments, checking every\nmonitored geometry pair at ``inflation_m``. ``clear`` iff no step violates;\notherwise ``first_blocked_m`` / ``first_blocked_pair`` name the first\nblocking position and pair. ``min_clearance_*`` report the tightest pair\nover the whole sweep (``None`` when no pair was measured). ``sample_seq``\nis the monitor sample the posture came from; the executing monitor\nre-samples and refuses if the joints moved since. ``pre_position``\n(phase-09d, additive) carries the planned pre-positioning motion when the\nposture is not clear (``needed`` True) or says none is needed; ``None`` =\na pre-09d producer / planning not evaluated.",
+      "properties": {
+        "assumptions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "clear": {
+          "title": "Clear",
+          "type": "boolean"
+        },
+        "first_blocked_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Blocked M"
+        },
+        "first_blocked_pair": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "First Blocked Pair",
+          "type": "array"
+        },
+        "inflation_m": {
+          "title": "Inflation M",
+          "type": "number"
+        },
+        "min_clearance_at_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Clearance At M"
+        },
+        "min_clearance_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Clearance M"
+        },
+        "min_clearance_pair": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Min Clearance Pair",
+          "type": "array"
+        },
+        "other_arms": {
+          "additionalProperties": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "default": {},
+          "title": "Other Arms",
+          "type": "object"
+        },
+        "pre_position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PrePositionPlan"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "q_checked": {
+          "default": [],
+          "items": {
+            "type": "number"
+          },
+          "title": "Q Checked",
+          "type": "array"
+        },
+        "sample_seq": {
+          "default": 0,
+          "title": "Sample Seq",
+          "type": "integer"
+        },
+        "scene_id": {
+          "title": "Scene Id",
+          "type": "string"
+        },
+        "step_m": {
+          "title": "Step M",
+          "type": "number"
+        },
+        "travel_m": {
+          "default": 0.65,
+          "title": "Travel M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "scene_id",
+        "inflation_m",
+        "step_m",
+        "clear"
+      ],
+      "title": "RailSweepVerdict",
+      "type": "object"
     }
   },
-  "description": "Outcome of one maintenance op (REST response; 200 whether or not ``ok``).\n\n``sdk_codes`` maps every SDK call the op made to its return code, in call\norder (``{\"clean_error\": 0, \"clean_warn\": 0}``); ``warnings`` lists the\nnon-fatal ``apply_backstops`` codes (e.g. a self-collision tool model the\nfirmware rejected). ``before``/``after`` are ``None`` when the executing\npath had no monitor sample (session path, or the monitor never connected).",
+  "description": "Outcome of one maintenance op (REST response; 200 whether or not ``ok``).\n\n``sdk_codes`` maps every SDK call the op made to its return code, in call\norder (``{\"clean_error\": 0, \"clean_warn\": 0}``); ``warnings`` lists the\nnon-fatal ``apply_backstops`` codes (e.g. a self-collision tool model the\nfirmware rejected). ``before``/``after`` are ``None`` when the executing\npath had no monitor sample (session path, or the monitor never connected).\n``rail_sweep`` is the twin verdict for ``home_rail`` (dry-run or real;\n``None`` for the other ops) \u2014 a refused sweep is ``ok=False`` with the\nverdict and an empty ``sdk_codes`` (zero writes).\n\nphase-09d (additive): ``status`` says how the op ran \u2014 ``\"done\"`` (the\ndefault; synchronous, 200), ``\"accepted\"`` (an asynchronous ``RailHomingJob``\nstarted because the posture needs a planned pre-positioning motion; 202,\n``job_id`` set, ``ok`` True, ``sdk_codes`` empty so far \u2014 progress rides\n``ArmMonitorTelemetry.maintenance`` and the job's final result, again an\n``ArmMaintenanceResult`` with ``status: done`` and the same ``job_id``,\nreplaces it at ``GET .../maintenance/last``) or ``\"refused\"`` (nothing ran,\n``ok`` False, suggestion in ``detail``).",
   "properties": {
     "after": {
       "anyOf": [
@@ -266,6 +527,18 @@
       "title": "Detail",
       "type": "string"
     },
+    "job_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Job Id"
+    },
     "ok": {
       "title": "Ok",
       "type": "boolean"
@@ -274,7 +547,8 @@
       "enum": [
         "clear_errors",
         "apply_backstops",
-        "recover"
+        "recover",
+        "home_rail"
       ],
       "title": "Op",
       "type": "string"
@@ -287,6 +561,17 @@
       "title": "Path",
       "type": "string"
     },
+    "rail_sweep": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RailSweepVerdict"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "sdk_codes": {
       "additionalProperties": {
         "type": "integer"
@@ -294,6 +579,16 @@
       "default": {},
       "title": "Sdk Codes",
       "type": "object"
+    },
+    "status": {
+      "default": "done",
+      "enum": [
+        "done",
+        "accepted",
+        "refused"
+      ],
+      "title": "Status",
+      "type": "string"
     },
     "warnings": {
       "default": [],

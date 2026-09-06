@@ -33,6 +33,11 @@ from apollo_mavis_v2_core.protocol.maintenance import (
     ArmMaintenanceRequest,
     ArmMaintenanceResult,
     MaintenancePath,
+    MaintenancePhase,
+    MaintenanceProgress,
+    MaintenanceStatus,
+    PrePositionPlan,
+    RailSweepVerdict,
 )
 from apollo_mavis_v2_core.protocol.microphone import MicrophoneInfo, MicStatus
 from apollo_mavis_v2_core.protocol.session import (
@@ -46,6 +51,7 @@ from apollo_mavis_v2_core.protocol.session import (
     WorkcellStatus,
 )
 from apollo_mavis_v2_core.protocol.telemetry import (
+    ArmBringupTelemetry,
     ArmTelemetry,
     ClearanceItem,
     ControllerTelemetry,
@@ -371,6 +377,136 @@ _MAINT_RECOVER_SESSION = ArmMaintenanceResult(
 _MAINT_RECOVER_REFUSED = ArmMaintenanceResult(
     arm_id="view", op="recover", path="monitor", ok=False, detail="recover needs a session",
 )
+# phase-09c: home_rail is twin-gated by a full-travel sweep at the arm's CURRENT posture.
+_Q_FOLDED = [3.141592653589793, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # xArm7 zero, joint 1 = pi
+_SWEEP_CLEAR = RailSweepVerdict(
+    scene_id="mavis_v2", inflation_m=0.025, step_m=0.005, clear=True,
+    min_clearance_m=0.0178, min_clearance_at_m=0.65,
+    min_clearance_pair=["grip/link2", "grip/link4"],
+    q_checked=_Q_FOLDED, other_arms={"view": [*_Q_FOLDED, 0.0]},
+    assumptions=["view rail unknown - used fallback 0.00 m"], sample_seq=4210,
+)
+_SWEEP_BLOCKED = RailSweepVerdict(
+    scene_id="mavis_v2", inflation_m=0.025, step_m=0.005, clear=False,
+    first_blocked_m=0.125, first_blocked_pair=["grip/gripper_finger_left", "table"],
+    min_clearance_m=-0.004, min_clearance_at_m=0.13,
+    min_clearance_pair=["grip/gripper_finger_left", "table"],
+    q_checked=[3.14, 0.4, 0.0, 1.9, 0.0, 1.5, 0.0], other_arms={"view": [*_Q_FOLDED, 0.0]},
+    sample_seq=4302,
+)
+_MAINT_HOME_DRY = ArmMaintenanceResult(
+    arm_id="grip", op="home_rail", path="monitor", ok=True,
+    detail="rail sweep clear (dry run - nothing written)", rail_sweep=_SWEEP_CLEAR,
+    before=_MON_VIEW_CLEARED.model_copy(update={"arm_id": "grip", "seq": 4210}),
+)
+_MAINT_HOME_OK = ArmMaintenanceResult(
+    arm_id="grip", op="home_rail", path="monitor", ok=True,
+    detail="rail homed (on_zero 1, enabled, 0.000 m)",
+    sdk_codes={  # the exact home_rail write set - never motion_enable
+        "set_linear_track_back_origin": 0, "set_linear_track_enable": 0,
+        "set_linear_track_speed": 0,
+    },
+    before=_MON_VIEW_CLEARED.model_copy(update={"arm_id": "grip", "seq": 4210}),
+    after=_MON_VIEW_CLEARED.model_copy(update={
+        "arm_id": "grip", "seq": 4260, "rail_pos_m": 0.0, "rail_homed": True,
+        "rail_enabled": True,
+    }),
+    rail_sweep=_SWEEP_CLEAR,
+)
+_MAINT_HOME_REFUSED = ArmMaintenanceResult(
+    arm_id="grip", op="home_rail", path="monitor", ok=False,
+    detail="rail sweep blocked at 0.125 m: grip/gripper_finger_left <-> table",
+    rail_sweep=_SWEEP_BLOCKED,
+)
+# phase-09d: when the CURRENT posture is not sweep-clear the runtime plans a joint path to a
+# rail-safe posture (every waypoint clear for all 131 rail positions) and offers it on the
+# verdict; on confirm the op runs as an asynchronous RailHomingJob (202 + job_id) whose phases
+# ride ArmMonitorTelemetry.maintenance and whose final result is GET .../maintenance/last.
+_PRE_POSITION_NONE = PrePositionPlan(
+    needed=False, detail="current posture clears the whole rail travel",
+)
+_PRE_POSITION_PLAN = PrePositionPlan(
+    needed=True, source="keyframe", target_q=_Q_FOLDED, waypoints=14, duration_s=38.5,
+    checked_rail_positions=131, clear=True,
+    detail="path to the factory-zero posture: 14 waypoints clear for all 131 rail positions",
+)
+_PRE_POSITION_REFUSED = PrePositionPlan(
+    needed=True, source="home", target_q=_Q_FOLDED, waypoints=0, checked_rail_positions=131,
+    clear=False,
+    detail="no rail-safe path found - fold the arm toward the factory zero posture in Studio "
+           "and retry",
+)
+_SWEEP_CLEAR_09D = _SWEEP_CLEAR.model_copy(update={"pre_position": _PRE_POSITION_NONE})
+_SWEEP_BLOCKED_PLANNED = _SWEEP_BLOCKED.model_copy(update={"pre_position": _PRE_POSITION_PLAN})
+_SWEEP_BLOCKED_UNPLANNABLE = _SWEEP_BLOCKED.model_copy(
+    update={"pre_position": _PRE_POSITION_REFUSED},
+)
+_JOB_ID = "home_rail-grip-20260905T101500-7f3a"
+_MAINT_HOME_DRY_PLANNED = ArmMaintenanceResult(
+    arm_id="grip", op="home_rail", path="monitor", ok=True,
+    detail="posture not clear - pre-positioning motion planned (dry run - nothing written)",
+    rail_sweep=_SWEEP_BLOCKED_PLANNED,
+    before=_MON_VIEW_CLEARED.model_copy(update={"arm_id": "grip", "seq": 4302}),
+)
+_MAINT_HOME_ACCEPTED = ArmMaintenanceResult(  # the 202 body
+    arm_id="grip", op="home_rail", path="monitor", ok=True, status="accepted", job_id=_JOB_ID,
+    detail="rail homing job started: pre-position (14 waypoints, ~39 s at 10 %) then home",
+    rail_sweep=_SWEEP_BLOCKED_PLANNED,
+    before=_MON_VIEW_CLEARED.model_copy(update={"arm_id": "grip", "seq": 4302}),
+)
+# The job's final result (GET .../maintenance/last): same job_id, status back to "done". The
+# job drives the arm through its own driver connection, so it reports the session path
+# (MaintenancePath has no "job" value - contract §1 keeps the vocabulary).
+_MAINT_HOME_JOB_DONE = _MAINT_HOME_OK.model_copy(update={
+    "path": "session", "job_id": _JOB_ID,
+    "detail": "rail homed after pre-positioning (on_zero 1, enabled, 0.000 m); posture held",
+    "rail_sweep": _SWEEP_BLOCKED_PLANNED,
+})
+_MAINT_HOME_JOB_FAILED = ArmMaintenanceResult(
+    arm_id="grip", op="home_rail", path="session", ok=False, job_id=_JOB_ID,
+    detail="positioning aborted: controller error 24 (Speed Exceeds Limit) - stopped, brakes on",
+    rail_sweep=_SWEEP_BLOCKED_PLANNED,
+)
+_MAINT_HOME_REFUSED_09D = ArmMaintenanceResult(
+    arm_id="grip", op="home_rail", path="monitor", ok=False, status="refused",
+    detail="rail sweep blocked at 0.125 m and no rail-safe path found - fold the arm toward "
+           "the factory zero posture in Studio and retry",
+    rail_sweep=_SWEEP_BLOCKED_UNPLANNABLE,
+)
+_PROGRESS_QUEUED = MaintenanceProgress(op="home_rail", job_id=_JOB_ID, phase="queued")
+_PROGRESS_POSITIONING = MaintenanceProgress(
+    op="home_rail", job_id=_JOB_ID, phase="positioning", detail="waypoint 9 / 14",
+    progress=0.55, started_at=1_757_067_300.0,
+)
+_PROGRESS_DONE = MaintenanceProgress(
+    op="home_rail", job_id=_JOB_ID, phase="done", detail="rail homed; posture held",
+    progress=1.0, started_at=1_757_067_300.0,
+)
+_PROGRESS_FAILED = MaintenanceProgress(
+    op="home_rail", job_id=_JOB_ID, phase="failed",
+    detail="positioning aborted: controller error 24", progress=0.55,
+    started_at=1_757_067_300.0,
+)
+# During the job the monitor is paused (the job's driver owns the box) and the other arm is
+# frozen at its last sample (09c D1, maintenance motion only since 09d).
+_MON_GRIP_HOMING_JOB = _MON_GRIP_RUNNING.model_copy(update={
+    "status": "paused", "detail": "rail homing job: positioning", "seq": 4310,
+    "maintenance_busy": True, "maintenance": _PROGRESS_POSITIONING,
+})
+_MON_VIEW_FROZEN = _MON_VIEW_BACKSTOPS.model_copy(update={
+    "status": "paused", "detail": "Perception Arm frozen at last sample (rail homing job)",
+    "seq": 831,
+})
+_HW_MONITOR_HOMING_JOB = HardwareMonitorTelemetry(
+    enabled=True, paused=True, arms=[_MON_GRIP_HOMING_JOB, _MON_VIEW_FROZEN],
+)
+_BRINGUP_ROWS = [
+    ArmBringupTelemetry(arm_id="grip", step="network", status="ok"),
+    ArmBringupTelemetry(arm_id="grip", step="connect", status="ok", detail="fw 2.5.0"),
+    ArmBringupTelemetry(arm_id="grip", step="rail", status="pending"),
+    ArmBringupTelemetry(arm_id="view", step="frozen", status="warning",
+                        detail="Perception Arm frozen at last sample"),
+]
 
 _WIRE_MODELS: list[BaseModel] = [
     HelloMsg(epoch="ep0", session_id="s0", role="controller"),
@@ -485,6 +621,58 @@ _WIRE_MODELS: list[BaseModel] = [
     _MAINT_APPLY_WARN,
     _MAINT_RECOVER_SESSION,
     _MAINT_RECOVER_REFUSED,
+    # phase-09c hardware session (home_rail + sweep verdict, speed_scale, bring-up rows)
+    ArmMaintenanceRequest(op="home_rail"),
+    ArmMaintenanceRequest(op="home_rail", dry_run=True),
+    _SWEEP_CLEAR,
+    _SWEEP_BLOCKED,
+    _MAINT_HOME_DRY,
+    _MAINT_HOME_OK,
+    _MAINT_HOME_REFUSED,
+    *_BRINGUP_ROWS,
+    SessionTelemetry(state="bringup", bringup=_BRINGUP_ROWS),
+    SessionTelemetry(state="running", bringup=None),
+    # phase-09d rail homing with planning (PrePositionPlan, async job status, progress)
+    PrePositionPlan(needed=False),
+    _PRE_POSITION_NONE,
+    _PRE_POSITION_PLAN,
+    _PRE_POSITION_REFUSED,
+    _SWEEP_CLEAR_09D,
+    _SWEEP_BLOCKED_PLANNED,
+    _SWEEP_BLOCKED_UNPLANNABLE,
+    _MAINT_HOME_DRY_PLANNED,
+    _MAINT_HOME_ACCEPTED,
+    _MAINT_HOME_JOB_DONE,
+    _MAINT_HOME_JOB_FAILED,
+    _MAINT_HOME_REFUSED_09D,
+    _PROGRESS_QUEUED,
+    _PROGRESS_POSITIONING,
+    _PROGRESS_DONE,
+    _PROGRESS_FAILED,
+    _MON_GRIP_HOMING_JOB,
+    _MON_VIEW_FROZEN,
+    _HW_MONITOR_HOMING_JOB,
+    TelemetryMsg(
+        seq=11, ts=20.0, epoch="ep0", active_arm=None, controller_connected=False,
+        arms=[], collision=CollisionReport.ok(), clearances=[],
+        episode=None, dagger=None, inference=None, session=None,
+        hardware_monitor=_HW_MONITOR_HOMING_JOB,
+    ),
+    TelemetryMsg(
+        seq=9, ts=18.0, epoch="ep0", active_arm="grip", controller_connected=True,
+        arms=[], collision=CollisionReport.ok(), clearances=[],
+        episode=None, dagger=None, inference=None,
+        session=SessionTelemetry(state="bringup", bringup=_BRINGUP_ROWS),
+        hardware_monitor=_HW_MONITOR_PAUSED,
+    ),
+    SessionSpec(
+        mode="teleop", kind="hardware", arms=["grip"], frames={"grip": "arm_base:grip"},
+        digital_twin_scene="mavis_v2", speed_scale=0.1,
+    ),
+    SessionInfo(
+        session_id="s1", epoch="ep1", mode="teleop", arms=["grip"], streams=["twin"],
+        state="bringup", kind="hardware", speed_scale=0.1,
+    ),
     TelemetryMsg(
         seq=5, ts=16.0, epoch="ep0", active_arm="arm0", controller_connected=True,
         arms=[_ARM_FAULTED], collision=CollisionReport.ok(), clearances=[],
@@ -871,6 +1059,8 @@ def test_arm_monitor_telemetry_fields_pinned_and_defaulted():
         # phase-09b read-back + maintenance flag
         "collision_sensitivity", "tcp_load_kg", "tcp_load_cog_mm", "backstops_match",
         "maintenance_busy",
+        # phase-09d async maintenance job progress
+        "maintenance",
     }
     required = {n for n, f in ArmMonitorTelemetry.model_fields.items() if f.is_required()}
     assert required == {"arm_id"}
@@ -883,6 +1073,7 @@ def test_arm_monitor_telemetry_fields_pinned_and_defaulted():
     assert (off.error_code, off.warn_code, off.state, off.mode) == (0, 0, None, None)
     assert (off.collision_sensitivity, off.tcp_load_kg, off.backstops_match) == (None,) * 3
     assert off.tcp_load_cog_mm == [] and off.maintenance_busy is False
+    assert off.maintenance is None
     # Mutable list defaults are per-instance (pydantic copies them).
     other = ArmMonitorTelemetry(arm_id="grip")
     off.q.append(1.0)
@@ -1133,14 +1324,22 @@ def test_arm_telemetry_fault_fields_are_additive():
 
 
 def test_arm_maintenance_models_pinned():
-    """phase-09b: POST /api/hardware/arms/{arm_id}/maintenance body + result, spelled exactly."""
-    assert get_args(ArmMaintenanceOp) == ("clear_errors", "apply_backstops", "recover")
+    """phase-09b: POST /api/hardware/arms/{arm_id}/maintenance body + result, spelled exactly
+    (phase-09c adds the ``home_rail`` op, ``dry_run`` and ``rail_sweep``; phase-09d ``status``
+    and ``job_id`` - all additive)."""
+    assert get_args(ArmMaintenanceOp) == (
+        "clear_errors", "apply_backstops", "recover", "home_rail",
+    )
     assert get_args(MaintenancePath) == ("monitor", "session")
-    assert set(ArmMaintenanceRequest.model_fields) == {"op"}
+    assert set(ArmMaintenanceRequest.model_fields) == {"op", "dry_run"}
     assert ArmMaintenanceRequest.model_fields["op"].is_required()
     assert ArmMaintenanceRequest.model_fields["op"].annotation == ArmMaintenanceOp
+    assert ArmMaintenanceRequest.model_fields["dry_run"].default is False
     assert set(ArmMaintenanceResult.model_fields) == {
         "arm_id", "op", "path", "ok", "detail", "sdk_codes", "warnings", "before", "after",
+        "rail_sweep",
+        # phase-09d async job: how the op ran + the RailHomingJob id
+        "status", "job_id",
     }
     required = {n for n, f in ArmMaintenanceResult.model_fields.items() if f.is_required()}
     assert required == {"arm_id", "op", "path", "ok"}
@@ -1148,16 +1347,24 @@ def test_arm_maintenance_models_pinned():
     assert ArmMaintenanceResult.model_fields["path"].annotation == MaintenancePath
     bare = ArmMaintenanceResult(arm_id="grip", op="clear_errors", path="monitor", ok=True)
     assert bare.detail == "" and bare.sdk_codes == {} and bare.warnings == []
-    assert bare.before is None and bare.after is None
+    assert bare.before is None and bare.after is None and bare.rail_sweep is None
+    assert bare.status == "done" and bare.job_id is None
     # Mutable defaults are per-instance (pydantic copies them).
     other = ArmMaintenanceResult(arm_id="grip", op="clear_errors", path="monitor", ok=True)
     bare.sdk_codes["clean_error"] = 0
     bare.warnings.append("x")
     assert other.sdk_codes == {} and other.warnings == []
-    # Vocabulary: SDK method names and anything motion-like are not ops.
-    for bad in ("clean_error", "home_rail", "enable", "apply", "CLEAR_ERRORS", ""):
+    # Vocabulary: SDK method names and ad-hoc spellings are not ops (home_rail IS one since
+    # phase-09c - the single motion op, twin-gated).
+    for bad in ("clean_error", "set_linear_track_back_origin", "home", "homing", "enable",
+                "apply", "CLEAR_ERRORS", "HOME_RAIL", ""):
         with pytest.raises(ValidationError):
             ArmMaintenanceRequest(op=bad)
+    with pytest.raises(ValidationError):
+        ArmMaintenanceRequest(op="home_rail", dry_run="maybe")
+    with pytest.raises(ValidationError):
+        ArmMaintenanceResult(arm_id="grip", op="home_rail", path="monitor", ok=True,
+                             rail_sweep={"clear": True})  # scene_id/inflation_m/step_m required
     for bad in ("rest", "driver", "MONITOR", ""):
         with pytest.raises(ValidationError):
             ArmMaintenanceResult(arm_id="grip", op="recover", path=bad, ok=True)
@@ -1174,9 +1381,13 @@ def test_arm_maintenance_models_pinned():
     with pytest.raises(ValidationError):
         ArmMaintenanceResult(arm_id="grip", op="clear_errors", path="monitor", ok=True,
                              before={"status": "running"})  # arm_id required in the sample
-    # Body wire form is flat.
+    # Body wire form is flat; dry_run defaults False and a legacy {"op"} body still parses.
     assert json.loads(ArmMaintenanceRequest(op="apply_backstops").model_dump_json()) == {
-        "op": "apply_backstops",
+        "op": "apply_backstops", "dry_run": False,
+    }
+    assert ArmMaintenanceRequest.model_validate({"op": "recover"}).dry_run is False
+    assert json.loads(ArmMaintenanceRequest(op="home_rail", dry_run=True).model_dump_json()) == {
+        "op": "home_rail", "dry_run": True,
     }
     # clear_errors on the monitor path: exactly clean_error + clean_warn in call order, the
     # before/after samples show C19 -> 0, and the op NEVER enabled motion.
@@ -1208,6 +1419,343 @@ def test_arm_maintenance_models_pinned():
     refused = json.loads(_MAINT_RECOVER_REFUSED.model_dump_json())
     assert refused["ok"] is False and refused["detail"] == "recover needs a session"
     assert refused["sdk_codes"] == {} and refused["path"] == "monitor"
+
+
+def test_rail_sweep_verdict_pinned():
+    """phase-09c: the twin sweep verdict that gates home_rail, spelled exactly."""
+    assert set(RailSweepVerdict.model_fields) == {
+        "scene_id", "inflation_m", "step_m", "travel_m", "clear",
+        "first_blocked_m", "first_blocked_pair",
+        "min_clearance_m", "min_clearance_at_m", "min_clearance_pair",
+        "q_checked", "other_arms", "assumptions", "sample_seq",
+        "pre_position",  # phase-09d plan (additive)
+    }
+    required = {n for n, f in RailSweepVerdict.model_fields.items() if f.is_required()}
+    assert required == {"scene_id", "inflation_m", "step_m", "clear"}
+    bare = RailSweepVerdict(scene_id="mavis_v2", inflation_m=0.025, step_m=0.005, clear=True)
+    assert bare.pre_position is None
+    assert bare.travel_m == 0.65  # full rail travel (CLAUDE.md: max 0.65 m)
+    assert bare.first_blocked_m is None and bare.first_blocked_pair == []
+    assert bare.min_clearance_m is None and bare.min_clearance_at_m is None
+    assert bare.min_clearance_pair == [] and bare.q_checked == [] and bare.other_arms == {}
+    assert bare.assumptions == [] and bare.sample_seq == 0
+    # Mutable defaults are per-instance.
+    other = RailSweepVerdict(scene_id="mavis_v2", inflation_m=0.025, step_m=0.005, clear=True)
+    bare.assumptions.append("x")
+    bare.other_arms["view"] = [0.0] * 8
+    assert other.assumptions == [] and other.other_arms == {}
+    # D4 numbers: the homing sweep uses the guardrail's 0.025 m debug inflation and 5 mm steps
+    # (131 positions over 0.65 m); the verdict carries them so the UI can say so.
+    assert (_SWEEP_CLEAR.inflation_m, _SWEEP_CLEAR.step_m) == (0.025, 0.005)
+    assert round(_SWEEP_CLEAR.travel_m / _SWEEP_CLEAR.step_m) + 1 == 131
+    # Wire form: q_checked is the 7 joints the executing monitor must re-find; other_arms
+    # carries q7 + rail (8 values) for the arm that was frozen at its last sample.
+    wire = json.loads(_SWEEP_CLEAR.model_dump_json())
+    assert wire["clear"] is True and wire["first_blocked_m"] is None
+    assert len(wire["q_checked"]) == 7 and len(wire["other_arms"]["view"]) == 8
+    assert wire["assumptions"] == ["view rail unknown - used fallback 0.00 m"]
+    assert wire["min_clearance_pair"] == ["grip/link2", "grip/link4"]
+    assert RailSweepVerdict.model_validate(wire) == _SWEEP_CLEAR
+    blocked = json.loads(_SWEEP_BLOCKED.model_dump_json())
+    assert blocked["clear"] is False and blocked["first_blocked_m"] == 0.125
+    assert blocked["first_blocked_pair"] == ["grip/gripper_finger_left", "table"]
+    assert blocked["min_clearance_m"] < 0  # penetration at inflation
+    assert RailSweepVerdict.model_validate(blocked) == _SWEEP_BLOCKED
+    for bad in (
+        {"scene_id": "mavis_v2", "inflation_m": 0.025, "step_m": 0.005},  # clear required
+        {"scene_id": "mavis_v2", "inflation_m": "thin", "step_m": 0.005, "clear": True},
+        {"scene_id": "mavis_v2", "inflation_m": 0.025, "step_m": 0.005, "clear": True,
+         "first_blocked_pair": "table"},  # list, not str
+        {"scene_id": "mavis_v2", "inflation_m": 0.025, "step_m": 0.005, "clear": True,
+         "other_arms": {"view": "folded"}},
+        {"scene_id": "mavis_v2", "inflation_m": 0.025, "step_m": 0.005, "clear": True,
+         "sample_seq": 1.5},
+    ):
+        with pytest.raises(ValidationError):
+            RailSweepVerdict.model_validate(bad)
+
+
+def test_home_rail_maintenance_wire():
+    """phase-09c: home_rail results - dry-run carries the verdict with zero writes, the real
+    op writes exactly the three track methods (never motion_enable), a blocked sweep is
+    ok=False with the verdict and nothing written."""
+    dry = json.loads(_MAINT_HOME_DRY.model_dump_json())
+    assert (dry["op"], dry["path"], dry["ok"]) == ("home_rail", "monitor", True)
+    assert dry["sdk_codes"] == {} and dry["after"] is None  # nothing written, no after-sample
+    assert dry["rail_sweep"]["clear"] is True
+    assert ArmMaintenanceResult.model_validate(dry) == _MAINT_HOME_DRY
+    real = json.loads(_MAINT_HOME_OK.model_dump_json())
+    assert list(real["sdk_codes"]) == [
+        "set_linear_track_back_origin", "set_linear_track_enable", "set_linear_track_speed",
+    ]
+    assert "motion_enable" not in real["sdk_codes"]
+    assert real["after"]["rail_homed"] is True and real["after"]["rail_enabled"] is True
+    assert real["after"]["rail_pos_m"] == 0.0 and real["before"]["arm_id"] == "grip"
+    assert real["rail_sweep"] == dry["rail_sweep"]
+    assert ArmMaintenanceResult.model_validate(real) == _MAINT_HOME_OK
+    refused = json.loads(_MAINT_HOME_REFUSED.model_dump_json())
+    assert refused["ok"] is False and refused["sdk_codes"] == {}
+    assert refused["rail_sweep"]["clear"] is False
+    assert refused["rail_sweep"]["first_blocked_pair"][1] == "table"
+    assert refused["detail"].startswith("rail sweep blocked at 0.125 m")
+    assert ArmMaintenanceResult.model_validate(refused) == _MAINT_HOME_REFUSED
+    # Additive: a 09b result without rail_sweep still parses (None); the other ops keep it None.
+    legacy = json.loads(_MAINT_CLEAR_OK.model_dump_json())
+    legacy.pop("rail_sweep")
+    assert ArmMaintenanceResult.model_validate(legacy).rail_sweep is None
+    assert _MAINT_APPLY_WARN.rail_sweep is None and _MAINT_RECOVER_SESSION.rail_sweep is None
+
+
+def test_pre_position_plan_pinned():
+    """phase-09d: the twin-planned pre-positioning motion, spelled exactly; only ``needed`` is
+    required and the defaults describe "no motion needed"."""
+    assert set(PrePositionPlan.model_fields) == {
+        "needed", "source", "target_q", "waypoints", "duration_s", "checked_rail_positions",
+        "clear", "detail",
+    }
+    required = {n for n, f in PrePositionPlan.model_fields.items() if f.is_required()}
+    assert required == {"needed"}
+    assert get_args(PrePositionPlan.model_fields["source"].annotation) == (
+        "current", "keyframe", "home", "search",
+    )
+    none = PrePositionPlan(needed=False)
+    assert none.source == "current" and none.target_q == [] and none.waypoints == 0
+    assert none.duration_s == 0.0 and none.checked_rail_positions == 0
+    assert none.clear is True and none.detail == ""
+    # Mutable defaults are per-instance.
+    other = PrePositionPlan(needed=False)
+    none.target_q.append(1.0)
+    assert other.target_q == []
+    # A found plan: 7 target joints, the path validated for all 131 rail positions (5 mm over
+    # 0.65 m - the carriage is unknown, so the check is position-agnostic).
+    wire = json.loads(_PRE_POSITION_PLAN.model_dump_json())
+    assert wire["needed"] is True and wire["source"] == "keyframe" and wire["clear"] is True
+    assert len(wire["target_q"]) == 7 and wire["waypoints"] == 14 and wire["duration_s"] == 38.5
+    assert wire["checked_rail_positions"] == 131 == round(0.65 / 0.005) + 1
+    assert PrePositionPlan.model_validate(wire) == _PRE_POSITION_PLAN
+    # No plan: needed but not clear -> the op is refused; detail carries the suggestion.
+    refused = json.loads(_PRE_POSITION_REFUSED.model_dump_json())
+    assert refused["needed"] is True and refused["clear"] is False and refused["waypoints"] == 0
+    assert "Studio" in refused["detail"]
+    assert PrePositionPlan.model_validate(refused) == _PRE_POSITION_REFUSED
+    for bad in ("rrt", "planned", "KEYFRAME", ""):
+        with pytest.raises(ValidationError):
+            PrePositionPlan(needed=True, source=bad)
+    with pytest.raises(ValidationError):
+        PrePositionPlan()  # needed is required
+    with pytest.raises(ValidationError):
+        PrePositionPlan(needed=True, target_q="folded")
+    with pytest.raises(ValidationError):
+        PrePositionPlan(needed=True, waypoints=3.5)
+    with pytest.raises(ValidationError):
+        PrePositionPlan(needed=True, checked_rail_positions="all")
+    # Rides the verdict (additive): a 09c verdict without it parses with None.
+    assert _SWEEP_BLOCKED_PLANNED.pre_position == _PRE_POSITION_PLAN
+    assert _SWEEP_CLEAR_09D.pre_position.needed is False and _SWEEP_CLEAR.pre_position is None
+    wire = json.loads(_SWEEP_BLOCKED_PLANNED.model_dump_json())
+    assert wire["clear"] is False and wire["pre_position"]["waypoints"] == 14
+    assert RailSweepVerdict.model_validate(wire) == _SWEEP_BLOCKED_PLANNED
+    wire.pop("pre_position")
+    assert RailSweepVerdict.model_validate(wire).pre_position is None
+    with pytest.raises(ValidationError):
+        RailSweepVerdict(scene_id="mavis_v2", inflation_m=0.025, step_m=0.005, clear=False,
+                         pre_position={"source": "keyframe"})  # needed required
+    with pytest.raises(ValidationError):
+        RailSweepVerdict(scene_id="mavis_v2", inflation_m=0.025, step_m=0.005, clear=False,
+                         pre_position="plan")
+
+
+def test_maintenance_status_and_async_result_wire():
+    """phase-09d: ArmMaintenanceResult.status / job_id - a 202 "accepted" carries the job id
+    and the plan, the job's final result reuses the id with status "done", a plan-less op is
+    "refused"; every 09b/09c result is a synchronous "done" without a job."""
+    assert get_args(MaintenanceStatus) == ("done", "accepted", "refused")
+    assert ArmMaintenanceResult.model_fields["status"].annotation == MaintenanceStatus
+    assert ArmMaintenanceResult.model_fields["status"].default == "done"
+    assert ArmMaintenanceResult.model_fields["job_id"].default is None
+    for res in (_MAINT_CLEAR_OK, _MAINT_APPLY_WARN, _MAINT_RECOVER_SESSION, _MAINT_HOME_DRY,
+                _MAINT_HOME_OK, _MAINT_HOME_REFUSED):
+        assert (res.status, res.job_id) == ("done", None)
+    legacy = json.loads(_MAINT_HOME_OK.model_dump_json())
+    assert legacy["status"] == "done" and legacy["job_id"] is None
+    legacy.pop("status")
+    legacy.pop("job_id")
+    assert ArmMaintenanceResult.model_validate(legacy) == _MAINT_HOME_OK
+    # Dry run, posture not clear but plannable: 200, nothing written, the plan on the verdict.
+    dry = json.loads(_MAINT_HOME_DRY_PLANNED.model_dump_json())
+    assert dry["status"] == "done" and dry["job_id"] is None and dry["sdk_codes"] == {}
+    assert dry["rail_sweep"]["clear"] is False
+    assert dry["rail_sweep"]["pre_position"]["needed"] is True
+    assert dry["rail_sweep"]["pre_position"]["waypoints"] == 14
+    assert ArmMaintenanceResult.model_validate(dry) == _MAINT_HOME_DRY_PLANNED
+    # 202 accepted: the job started, nothing written yet, job_id set.
+    accepted = json.loads(_MAINT_HOME_ACCEPTED.model_dump_json())
+    assert (accepted["status"], accepted["job_id"], accepted["ok"]) == ("accepted", _JOB_ID, True)
+    assert accepted["sdk_codes"] == {} and accepted["after"] is None
+    assert accepted["rail_sweep"]["pre_position"]["clear"] is True
+    assert ArmMaintenanceResult.model_validate(accepted) == _MAINT_HOME_ACCEPTED
+    # The job's final result (GET .../maintenance/last): "done" with the SAME job_id, the
+    # exact home_rail write set, never motion_enable, the after-sample homed at 0.000 m.
+    done = json.loads(_MAINT_HOME_JOB_DONE.model_dump_json())
+    assert (done["status"], done["job_id"], done["ok"]) == ("done", _JOB_ID, True)
+    assert list(done["sdk_codes"]) == [
+        "set_linear_track_back_origin", "set_linear_track_enable", "set_linear_track_speed",
+    ]
+    assert "motion_enable" not in done["sdk_codes"]
+    assert done["after"]["rail_homed"] is True and done["after"]["rail_pos_m"] == 0.0
+    assert ArmMaintenanceResult.model_validate(done) == _MAINT_HOME_JOB_DONE
+    failed = json.loads(_MAINT_HOME_JOB_FAILED.model_dump_json())
+    assert (failed["status"], failed["job_id"], failed["ok"]) == ("done", _JOB_ID, False)
+    assert failed["detail"].startswith("positioning aborted") and failed["sdk_codes"] == {}
+    assert ArmMaintenanceResult.model_validate(failed) == _MAINT_HOME_JOB_FAILED
+    # Refused: no rail-safe plan - nothing ran, no job, the suggestion in detail.
+    refused = json.loads(_MAINT_HOME_REFUSED_09D.model_dump_json())
+    assert (refused["status"], refused["job_id"], refused["ok"]) == ("refused", None, False)
+    assert refused["sdk_codes"] == {}
+    assert refused["rail_sweep"]["pre_position"]["clear"] is False
+    assert "Studio" in refused["detail"]
+    assert ArmMaintenanceResult.model_validate(refused) == _MAINT_HOME_REFUSED_09D
+    for bad in ("pending", "running", "queued", "ok", "DONE", ""):
+        with pytest.raises(ValidationError):
+            ArmMaintenanceResult(arm_id="grip", op="home_rail", path="monitor", ok=True,
+                                 status=bad)
+    with pytest.raises(ValidationError):
+        ArmMaintenanceResult(arm_id="grip", op="home_rail", path="monitor", ok=True, job_id=17)
+
+
+def test_maintenance_progress_pinned_and_monitor_row_additive():
+    """phase-09d: MaintenanceProgress rides ArmMonitorTelemetry.maintenance while a
+    RailHomingJob runs (None otherwise); phases spelled exactly, in execution order."""
+    assert get_args(MaintenancePhase) == (
+        "queued", "sweeping", "planning", "connecting", "positioning",
+        "homing", "verifying", "done", "failed",
+    )
+    assert set(MaintenanceProgress.model_fields) == {
+        "op", "job_id", "phase", "detail", "progress", "started_at",
+    }
+    required = {n for n, f in MaintenanceProgress.model_fields.items() if f.is_required()}
+    assert required == {"op", "job_id", "phase"}
+    assert MaintenanceProgress.model_fields["op"].annotation == ArmMaintenanceOp
+    assert MaintenanceProgress.model_fields["phase"].annotation == MaintenancePhase
+    assert ArmMonitorTelemetry.model_fields["maintenance"].default is None
+    queued = MaintenanceProgress(op="home_rail", job_id="j1", phase="queued")
+    assert queued.detail == "" and queued.progress == 0.0 and queued.started_at is None
+    for bad in ("sweep", "moving", "running", "POSITIONING", ""):
+        with pytest.raises(ValidationError):
+            MaintenanceProgress(op="home_rail", job_id="j1", phase=bad)
+    with pytest.raises(ValidationError):
+        MaintenanceProgress(op="home_rail", phase="queued")  # job_id required
+    with pytest.raises(ValidationError):
+        MaintenanceProgress(op="homing", job_id="j1", phase="queued")  # op vocabulary shared
+    with pytest.raises(ValidationError):
+        MaintenanceProgress(op="home_rail", job_id="j1", phase="homing", progress="half")
+    # The row: None by default and on every pre-09d producer; the job sets it together with
+    # maintenance_busy while the monitor is paused (the job's driver owns the box).
+    assert ArmMonitorTelemetry(arm_id="grip").maintenance is None
+    assert _MON_GRIP_RUNNING.maintenance is None and _MON_VIEW_BACKSTOPS.maintenance is None
+    legacy = json.loads(_MON_GRIP_RUNNING.model_dump_json())
+    assert legacy["maintenance"] is None
+    legacy.pop("maintenance")
+    assert ArmMonitorTelemetry.model_validate(legacy) == _MON_GRIP_RUNNING
+    wire = json.loads(_MON_GRIP_HOMING_JOB.model_dump_json())
+    assert wire["status"] == "paused" and wire["maintenance_busy"] is True
+    assert wire["maintenance"] == {
+        "op": "home_rail", "job_id": _JOB_ID, "phase": "positioning",
+        "detail": "waypoint 9 / 14", "progress": 0.55, "started_at": 1_757_067_300.0,
+    }
+    assert ArmMonitorTelemetry.model_validate(wire) == _MON_GRIP_HOMING_JOB
+    with pytest.raises(ValidationError):
+        ArmMonitorTelemetry(arm_id="grip", maintenance={"phase": "queued"})  # op/job_id required
+    with pytest.raises(ValidationError):
+        ArmMonitorTelemetry(arm_id="grip", maintenance="positioning")
+    # job_id ties the telemetry to the 202 response and to the final result.
+    assert _PROGRESS_POSITIONING.job_id == _MAINT_HOME_ACCEPTED.job_id
+    assert _PROGRESS_DONE.job_id == _MAINT_HOME_JOB_DONE.job_id
+    assert _PROGRESS_DONE.progress == 1.0 and _PROGRESS_FAILED.phase == "failed"
+    # Through the block and the 25 Hz frame: the frozen arm carries no progress.
+    frame = TelemetryMsg(
+        seq=11, ts=20.0, epoch="ep0", active_arm=None, controller_connected=False,
+        arms=[], collision=CollisionReport.ok(), clearances=[],
+        episode=None, dagger=None, inference=None, hardware_monitor=_HW_MONITOR_HOMING_JOB,
+    )
+    wire = json.loads(frame.model_dump_json())
+    rows = wire["hardware_monitor"]["arms"]
+    assert wire["hardware_monitor"]["paused"] is True
+    assert [r["maintenance"] and r["maintenance"]["phase"] for r in rows] == ["positioning", None]
+    assert [r["maintenance_busy"] for r in rows] == [True, False]
+    assert TelemetryMsg.model_validate(wire) == frame
+
+
+def test_arm_bringup_telemetry_pinned_and_session_bringup_additive():
+    """phase-09c (D5): per-arm bring-up rows ride SessionTelemetry.bringup while the
+    hardware session is in the bringup state; additive (None for sim / once running)."""
+    assert set(ArmBringupTelemetry.model_fields) == {"arm_id", "step", "status", "detail"}
+    required = {n for n, f in ArmBringupTelemetry.model_fields.items() if f.is_required()}
+    assert required == {"arm_id", "step", "status"}
+    assert get_args(ArmBringupTelemetry.model_fields["status"].annotation) == (
+        "pending", "ok", "warning", "error",
+    )
+    assert ArmBringupTelemetry(arm_id="grip", step="rail", status="ok").detail == ""
+    for bad in ("unhomed", "running", "OK", ""):
+        with pytest.raises(ValidationError):
+            ArmBringupTelemetry(arm_id="grip", step="rail", status=bad)
+    with pytest.raises(ValidationError):
+        ArmBringupTelemetry(arm_id="grip", status="ok")  # step required
+    assert set(SessionTelemetry.model_fields) == {
+        "state", "start_from_progress", "plan_status", "trainer_alive", "bringup",
+    }
+    assert SessionTelemetry(state="running").bringup is None
+    block = SessionTelemetry(state="bringup", bringup=_BRINGUP_ROWS)
+    wire = json.loads(block.model_dump_json())
+    assert wire["state"] == "bringup" and len(wire["bringup"]) == 4
+    assert wire["bringup"][3] == {
+        "arm_id": "view", "step": "frozen", "status": "warning",
+        "detail": "Perception Arm frozen at last sample",
+    }
+    assert SessionTelemetry.model_validate(wire) == block
+    legacy = dict(wire)
+    legacy.pop("bringup")
+    assert SessionTelemetry.model_validate(legacy).bringup is None
+    with pytest.raises(ValidationError):
+        SessionTelemetry(state="bringup", bringup=[{"arm_id": "grip"}])
+    with pytest.raises(ValidationError):
+        SessionTelemetry(state="bringup", bringup="connecting")
+    # Nested in a frame: the rows survive the 25 Hz round trip.
+    frame = TelemetryMsg(
+        seq=9, ts=18.0, epoch="ep0", active_arm="grip", controller_connected=True,
+        arms=[], collision=CollisionReport.ok(), clearances=[],
+        episode=None, dagger=None, inference=None, session=block,
+    )
+    wire = json.loads(frame.model_dump_json())
+    assert [r["step"] for r in wire["session"]["bringup"]] == [
+        "network", "connect", "rail", "frozen",
+    ]
+    assert TelemetryMsg.model_validate(wire) == frame
+
+
+def test_session_info_kind_and_speed_scale_additive():
+    """phase-09c: SessionInfo echoes the workcell kind and the speed scale; both default so a
+    pre-09c producer (sim only, unscaled) still parses."""
+    assert set(SessionInfo.model_fields) == {
+        "session_id", "epoch", "mode", "arms", "streams", "state", "kind", "speed_scale",
+    }
+    legacy = {
+        "session_id": "s0", "epoch": "ep0", "mode": "teleop", "arms": ["arm0"],
+        "streams": ["cam0", "sim"], "state": "RUNNING",
+    }
+    info = SessionInfo.model_validate(legacy)
+    assert (info.kind, info.speed_scale) == ("sim", 1.0)
+    hw = SessionInfo.model_validate({**legacy, "kind": "hardware", "speed_scale": 0.1})
+    assert (hw.kind, hw.speed_scale) == ("hardware", 0.1)
+    wire = json.loads(hw.model_dump_json())
+    assert wire["kind"] == "hardware" and wire["speed_scale"] == 0.1
+    assert SessionInfo.model_validate(wire) == hw
+    for bad in ("twin", "real", "SIM", ""):
+        with pytest.raises(ValidationError):
+            SessionInfo.model_validate({**legacy, "kind": bad})
+    for bad in (0, 1.5, -0.1, "slow"):
+        with pytest.raises(ValidationError):
+            SessionInfo.model_validate({**legacy, "speed_scale": bad})
 
 
 def test_tracker_calibration_model_fields_pinned():
@@ -1401,3 +1949,24 @@ def test_session_spec_collect_dagger_require_task():
     assert _spec(mode="dagger", task="sort").mode == "dagger"
     assert _spec(mode="teleop").task is None  # teleop/inference: task optional
     assert _spec(mode="inference").task is None
+
+
+def test_session_spec_speed_scale_bounds():
+    """phase-09c (D2): speed_scale in (0, 1]; default 1.0 (unscaled); 0 and 1.5 are 422."""
+    assert SessionSpec.model_fields["speed_scale"].default == 1.0
+    assert _spec().speed_scale == 1.0
+    for ok in (1, 1.0, 0.3, 0.1, 1e-6):
+        assert _spec(speed_scale=ok).speed_scale == float(ok)
+    assert isinstance(_spec(speed_scale=1).speed_scale, float)  # int coerces
+    for bad in (0, 0.0, 1.5, -0.1, 2, "fast", None):
+        with pytest.raises(ValidationError):
+            _spec(speed_scale=bad)
+    # Hardware sessions carry the same field (the tab default is 10 %); the wire form is flat.
+    hw = _spec(kind="hardware", sim_scene=None, digital_twin_scene="mavis_v2",
+               arms=["grip"], speed_scale=0.1)
+    assert hw.speed_scale == 0.1
+    assert json.loads(hw.model_dump_json())["speed_scale"] == 0.1
+    # Additive: a pre-09c body without the field parses at 1.0.
+    body = json.loads(_spec().model_dump_json())
+    body.pop("speed_scale")
+    assert SessionSpec.model_validate(body).speed_scale == 1.0
