@@ -84,6 +84,8 @@ def test_telemetry_schema_embeds_tracker_block(tmp_path):
         "pose_raw", "pose_world", "pose_filtered", "clutch", "engaged_arm", "anchor_tcp",
         "target_tcp", "settings", "controller", "device_held", "device_action",
         "charging", "calibration",
+        # Controller link (13-tracker §3.5 item 7b, 2026-09-07).
+        "controller_age_s", "objects", "dongle_present",
     }
     # phase-10: calibration is a nullable, defaulted sub-model (additive).
     calibration = tracker["properties"]["calibration"]
@@ -91,6 +93,12 @@ def test_telemetry_schema_embeds_tracker_block(tmp_path):
     assert {"type": "null"} in calibration["anyOf"]
     assert calibration["default"] is None
     assert not {"charging", "calibration"} & set(tracker["required"])
+    # The link fields are optional on the wire too, so the UI reads a producer
+    # that omits them as UNKNOWN rather than as "unplugged" / "not paired".
+    assert not {"controller_age_s", "objects", "dongle_present"} & set(tracker["required"])
+    assert tracker["properties"]["objects"]["type"] == "array"
+    assert {"type": "null"} in tracker["properties"]["dongle_present"]["anyOf"]
+    assert {"type": "null"} in tracker["properties"]["controller_age_s"]["anyOf"]
     assert set(tracker["properties"]["status"]["enum"]) == {
         "no_backend", "starting", "searching", "tracking", "stale", "error",
     }

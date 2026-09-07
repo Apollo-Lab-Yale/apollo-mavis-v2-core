@@ -889,18 +889,28 @@ def test_tracker_telemetry_filter_and_device_action_fields_are_additive():
 
 
 def test_tracker_telemetry_charging_and_calibration_fields_are_additive():
-    """Pre-phase-10 producers (no ``charging``/``calibration``) still parse."""
+    """Pre-phase-10 producers (no ``charging``/``calibration``) still parse, and
+    so do pre-2026-09-07 ones without the three controller-LINK fields."""
     assert set(TrackerTelemetry.model_fields) == {
         "backend", "status", "detail", "object_name", "seq", "rate_hz", "age_s",
         "pose_raw", "pose_world", "pose_filtered", "clutch", "engaged_arm", "anchor_tcp",
         "target_tcp", "settings", "controller", "device_held", "device_action",
         "charging", "calibration",
+        # Controller link (13-tracker §3.5 item 7b): the BUTTON path's own age,
+        # the pairing evidence and the receiver's USB presence.
+        "controller_age_s", "objects", "dongle_present",
     }
     legacy = _TRACKER_ENGAGED.model_dump(mode="json")
     legacy.pop("charging")
     legacy.pop("calibration")
+    for link_field in ("controller_age_s", "objects", "dongle_present"):
+        legacy.pop(link_field)
     parsed = TrackerTelemetry.model_validate(legacy)
     assert parsed.charging is None and parsed.calibration is None
+    # A producer without the link fields must read as UNKNOWN, never as "no
+    # receiver" / "not paired": None / None / empty list.
+    assert parsed.controller_age_s is None and parsed.dongle_present is None
+    assert parsed.objects == []
     # Wire form carries both keys; calibration is the nested status snapshot.
     calibrating = _TRACKER_ENGAGED.model_copy(
         update={"charging": True, "calibration": _CALIB_BASE_STATION}

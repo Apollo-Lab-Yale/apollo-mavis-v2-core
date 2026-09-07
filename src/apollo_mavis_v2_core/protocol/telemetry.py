@@ -165,6 +165,23 @@ class TrackerTelemetry(BaseModel):
     what the anchor/delta math actually consumes; ``None`` when no sample.
     ``calibration`` mirrors ``GET /api/tracker/calibration`` (protocol.tracker)
     so the Devices-page wizard follows progress without polling.
+
+    Link fields (2026-09-07, 13-tracker §3.5 "controller link"): the pose path
+    and the button path are INDEPENDENT and can fail apart, which is exactly
+    what happened on 2026-09-06 (poses at 135 Hz while libsurvive delivered no
+    button event at all, so the clutch could never engage and the frozen
+    ``controller`` state looked plausible). Therefore:
+
+    * ``controller_age_s`` is the age of the newest controller INPUT event
+      (button / touch / axis), independent of ``age_s`` (the pose age).
+      ``None`` when no input event has ever been seen. A pose-fresh sample with
+      a stale ``controller_age_s`` means "moving works, buttons do not".
+    * ``objects`` lists the OBJECT-type devices libsurvive currently reports
+      (e.g. ``["WM0"]``), so a panel can separate "not paired / dongle busy"
+      (empty) from "paired, waiting for base stations".
+    * ``dongle_present`` is the USB presence of the Watchman receiver
+      (``28de:2101``) read from sysfs, so "unplugged" is distinguishable from
+      "unpaired". ``None`` when the check is unavailable (non-Linux, no sysfs).
     """
 
     backend: Literal["libsurvive", "fake", "none"]
@@ -187,6 +204,11 @@ class TrackerTelemetry(BaseModel):
     device_action: str | None = None  # last device-sourced discrete action (~1 s latch)
     charging: bool | None = None  # controller on external (USB) power; None = not reported
     calibration: TrackerCalibrationStatus | None = None  # additive (phase-10 wizard)
+    # Controller link (additive, 2026-09-07): the button path's own liveness and
+    # the pairing evidence behind it (see the class docstring).
+    controller_age_s: float | None = None  # now - rx_mono of the newest INPUT event
+    objects: list[str] = Field(default_factory=list)  # libsurvive OBJECT devices seen
+    dongle_present: bool | None = None  # USB 28de:2101 in sysfs; None = not checked
 
 
 class MicrophoneTelemetry(BaseModel):

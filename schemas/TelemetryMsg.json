@@ -1473,7 +1473,7 @@
       "type": "object"
     },
     "TrackerTelemetry": {
-      "description": "Vive-tracker block (13-tracker \u00a73.5), additive.\n\nDevice fields are populated even without a session; session fields\n(``engaged_arm``, ``anchor_tcp``, ``target_tcp``) are ``None`` otherwise.\n``controller`` echoes the raw controller inputs (``None`` when the backend\nreports no controller) and ``device_held`` the key codes the runtime\ninjects from them (13-tracker \u00a71.1); a stale sample yields an empty list.\n``device_action`` is the last device-sourced discrete action (e.g.\n``\"switch_arm\"``), cleared by the runtime ~1 s after it fired.\n``pose_filtered`` is the aligned pose after the One Euro filter (\u00a74), i.e.\nwhat the anchor/delta math actually consumes; ``None`` when no sample.\n``calibration`` mirrors ``GET /api/tracker/calibration`` (protocol.tracker)\nso the Devices-page wizard follows progress without polling.",
+      "description": "Vive-tracker block (13-tracker \u00a73.5), additive.\n\nDevice fields are populated even without a session; session fields\n(``engaged_arm``, ``anchor_tcp``, ``target_tcp``) are ``None`` otherwise.\n``controller`` echoes the raw controller inputs (``None`` when the backend\nreports no controller) and ``device_held`` the key codes the runtime\ninjects from them (13-tracker \u00a71.1); a stale sample yields an empty list.\n``device_action`` is the last device-sourced discrete action (e.g.\n``\"switch_arm\"``), cleared by the runtime ~1 s after it fired.\n``pose_filtered`` is the aligned pose after the One Euro filter (\u00a74), i.e.\nwhat the anchor/delta math actually consumes; ``None`` when no sample.\n``calibration`` mirrors ``GET /api/tracker/calibration`` (protocol.tracker)\nso the Devices-page wizard follows progress without polling.\n\nLink fields (2026-09-07, 13-tracker \u00a73.5 \"controller link\"): the pose path\nand the button path are INDEPENDENT and can fail apart, which is exactly\nwhat happened on 2026-09-06 (poses at 135 Hz while libsurvive delivered no\nbutton event at all, so the clutch could never engage and the frozen\n``controller`` state looked plausible). Therefore:\n\n* ``controller_age_s`` is the age of the newest controller INPUT event\n  (button / touch / axis), independent of ``age_s`` (the pose age).\n  ``None`` when no input event has ever been seen. A pose-fresh sample with\n  a stale ``controller_age_s`` means \"moving works, buttons do not\".\n* ``objects`` lists the OBJECT-type devices libsurvive currently reports\n  (e.g. ``[\"WM0\"]``), so a panel can separate \"not paired / dongle busy\"\n  (empty) from \"paired, waiting for base stations\".\n* ``dongle_present`` is the USB presence of the Watchman receiver\n  (``28de:2101``) read from sysfs, so \"unplugged\" is distinguishable from\n  \"unpaired\". ``None`` when the check is unavailable (non-Linux, no sysfs).",
       "properties": {
         "age_s": {
           "anyOf": [
@@ -1546,6 +1546,18 @@
           ],
           "default": null
         },
+        "controller_age_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Controller Age S"
+        },
         "detail": {
           "default": "",
           "title": "Detail",
@@ -1570,6 +1582,18 @@
           "title": "Device Held",
           "type": "array"
         },
+        "dongle_present": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dongle Present"
+        },
         "engaged_arm": {
           "anyOf": [
             {
@@ -1586,6 +1610,13 @@
           "default": "",
           "title": "Object Name",
           "type": "string"
+        },
+        "objects": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Objects",
+          "type": "array"
         },
         "pose_filtered": {
           "anyOf": [

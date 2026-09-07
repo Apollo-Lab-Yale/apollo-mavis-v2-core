@@ -75,6 +75,10 @@ class SafetyConfig(BaseModel):
     geom_inflation_m: float = Field(default=0.008, gt=0)  # TOTAL pair inflation δ
     min_clearance_m: float = 0.0  # extra block threshold above inflation
     warn_clearance_m: float = 0.025  # UI amber
+    # Range of the 25 Hz clearance sweep behind ``telemetry.clearances`` (pairs at or
+    # beyond it are not reported). 0.10 m since 2026-09-07 so the Cockpit's
+    # proximity frame can fade in before the 0.05 m "close" grade; was 0.05.
+    clearance_sweep_m: float = Field(default=0.10, gt=0)
     hysteresis_m: float = 0.002  # unblock needs dist >= δ + this
     max_active_constraint_rows: int = 12  # IK CollisionAvoidanceLimit row cap
     twin_staleness_s: float = 0.15  # gate fails closed past either staleness
