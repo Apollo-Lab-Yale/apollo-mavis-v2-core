@@ -1,8 +1,9 @@
 """Keymap invariants and literal spine-§5 table equality (01-core §13, §18).
 
 Any keymap edit is a conscious spine change: the code->action assertions
-below are the spine table verbatim (23 entries after 13-tracker §3: 7 held
-axis pairs + arrows + the ``tracker_clutch`` modifier + 6 discrete keys).
+below are the spine table verbatim (24 entries after 13-tracker §3 and the
+2026-09-08 ``reset_to_initial`` key: 7 held axis pairs + arrows + the
+``tracker_clutch`` modifier + 7 discrete keys).
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ _SPINE_TABLE = {
     "KeyZ": ("switch_arm_prev", "discrete", "session", "LB"),
     "Tab": ("switch_arm", "discrete", "session", "RB"),
     "Space": ("takeover_toggle", "discrete", "session", None),
+    "KeyR": ("reset_to_initial", "discrete", "session", None),
     "KeyN": ("episode_new", "discrete", "episode", None),
     "Enter": ("episode_save", "discrete", "episode", None),
     "Backspace": ("episode_discard", "discrete", "episode", None),
@@ -47,7 +49,7 @@ _SPINE_TABLE = {
 
 
 def test_entry_count_and_unique_codes():
-    assert len(KEYMAP) == 23  # the full enumerated §13 table (== spine §5)
+    assert len(KEYMAP) == 24  # the full enumerated §13 table (== spine §5)
     codes = [e.code for e in KEYMAP]
     assert len(set(codes)) == len(codes)
 
@@ -62,14 +64,22 @@ def test_literal_table_equality_against_spine():
 
 def test_translate_labels_match_spec():
     labels = {e.code: e.label for e in KEYMAP}
-    assert labels["KeyW"] == "+x (forward)"
-    assert labels["KeyS"] == "-x (back)"
+    # The translate keys name the KEY axes only; the physical frame they land on is
+    # the runtime's `control.translate_frame` (default the operator-fixed world frame
+    # since 2026-09-08 evening; the active arm's wrist camera was that morning's
+    # default), published per session as `SessionTelemetry.translate_frame` so
+    # the overlay can say which one is live. The LABELS must stay frame-neutral —
+    # naming one here would lie the moment the operator switches.
+    assert labels["KeyW"] == "forward"
+    assert labels["KeyS"] == "back"
+    assert not any("frame" in label for label in labels.values())
     assert labels["KeyA"] == "left"
     assert labels["KeyD"] == "right"
     assert labels["KeyE"] == "up"
     assert labels["KeyQ"] == "down"
     assert labels["KeyC"] == "tracker clutch (hold)"
     assert labels["KeyZ"] == "previous arm"
+    assert labels["KeyR"] == "return to the initial condition"
     assert labels["Space"] == (
         "takeover toggle (DAgger: recorded; inference: safety escape, never recorded)"
     )
@@ -99,6 +109,7 @@ def test_derived_views_match_table():
         "KeyZ": "switch_arm_prev",
         "Tab": "switch_arm",
         "Space": "takeover_toggle",
+        "KeyR": "reset_to_initial",
         "KeyN": "episode_new",
         "Enter": "episode_save",
         "Backspace": "episode_discard",

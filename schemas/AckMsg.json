@@ -14,10 +14,15 @@
         "episode_new",
         "episode_save",
         "episode_discard",
+        "reset_to_initial",
         "save_profile",
         "set_initial_condition",
         "joint_target",
-        "tracker_settings"
+        "tracker_settings",
+        "takeover",
+        "handback",
+        "train_now",
+        "goto_profile"
       ],
       "title": "Name",
       "type": "string"

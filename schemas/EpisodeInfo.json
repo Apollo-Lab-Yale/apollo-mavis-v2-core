@@ -1,0 +1,97 @@
+{
+  "description": "``GET /api/datasets/{ns}/{name}/episodes`` row: one saved episode directory\n(10-frames \u00a711.3 / \u00a711.4), read from its ``episode.json`` only.",
+  "properties": {
+    "audio": {
+      "default": false,
+      "title": "Audio",
+      "type": "boolean"
+    },
+    "duration_s": {
+      "title": "Duration S",
+      "type": "number"
+    },
+    "episode_id": {
+      "title": "Episode Id",
+      "type": "string"
+    },
+    "export_note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Export Note"
+    },
+    "export_ok": {
+      "default": true,
+      "title": "Export Ok",
+      "type": "boolean"
+    },
+    "frames": {
+      "title": "Frames",
+      "type": "integer"
+    },
+    "frames_dropped": {
+      "default": 0,
+      "title": "Frames Dropped",
+      "type": "integer"
+    },
+    "index": {
+      "title": "Index",
+      "type": "integer"
+    },
+    "open": {
+      "default": false,
+      "title": "Open",
+      "type": "boolean"
+    },
+    "recorded_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Recorded At"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    },
+    "task": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Task"
+    }
+  },
+  "required": [
+    "episode_id",
+    "index",
+    "frames",
+    "duration_s"
+  ],
+  "title": "EpisodeInfo",
+  "type": "object"
+}

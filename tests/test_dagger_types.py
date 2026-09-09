@@ -104,3 +104,20 @@ def test_trainer_status_round_trip():
 
     with pytest.raises(ValueError):
         TrainerStatus(state="exploded")
+
+
+def test_episode_summary_actor_counts_are_additive():
+    """15-online-dagger §4: ``n_expert_frames`` / ``n_novice_frames`` (the ``actor`` split)
+    default to 0 so every pre-phase-14 constructor call still works; appended last."""
+    fields = [f.name for f in dataclasses.fields(EpisodeSummary)]
+    assert fields[-3:] == ["episode_id", "n_expert_frames", "n_novice_frames"]
+    summary = EpisodeSummary(
+        episode_index=4, n_frames=500, n_intervention_frames=60, n_label_frames=50,
+        takeover_segments=2, segment_doubts=[0.1, 0.4], success=None,
+    )
+    assert (summary.n_expert_frames, summary.n_novice_frames) == (0, 0)
+    split = dataclasses.replace(summary, n_expert_frames=60, n_novice_frames=440)
+    assert split.n_expert_frames + split.n_novice_frames == split.n_frames
+    assert split.n_expert_frames >= split.n_label_frames  # expert counts transition frames too
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        split.n_expert_frames = 0

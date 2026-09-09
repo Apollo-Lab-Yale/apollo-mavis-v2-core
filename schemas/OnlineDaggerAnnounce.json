@@ -1,0 +1,24 @@
+{
+  "description": "``SessionAnnounce.online_dagger`` (15-online-dagger \u00a76): the paths the trainer node\nneeds \u2014 the session directory and the rollouts dataset it reads (a MAVIS\nepisode-directory dataset with the ``actor`` column). The trainer keeps its own\nartefacts wherever it likes (the skill suggests ``<session_dir>/trainer/``; the\nruntime never reads them). Field order is the contract (both goldens pin it).",
+  "properties": {
+    "rollouts_dir": {
+      "title": "Rollouts Dir",
+      "type": "string"
+    },
+    "session_dir": {
+      "title": "Session Dir",
+      "type": "string"
+    },
+    "session_name": {
+      "title": "Session Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "session_name",
+    "session_dir",
+    "rollouts_dir"
+  ],
+  "title": "OnlineDaggerAnnounce",
+  "type": "object"
+}

@@ -5,6 +5,12 @@ set from it — no hardcoded duplicate (binding). ``axis_map`` is the single
 source of signs for runtime's ``held_to_twist``. The optional ``gamepad``
 field carries the XInput control label so the UI never hard-codes the pad
 mapping either.
+
+2026-09-07 (operator decision, overview §5 "Input interfaces"): the keyboard is
+a full teleop interface alongside the Vive controller, so every held row here IS
+a key; codes are unique across the whole table (no code is both a held and a
+discrete row), which is what keeps the episode keys N / Enter / Backspace off
+the movement keys.
 """
 
 from __future__ import annotations
@@ -53,9 +59,14 @@ _SPACE_LABEL = (
 )
 
 KEYMAP: tuple[KeymapEntry, ...] = (
-    # held / translate (spine §5: W/S = ±x, A/D = left/right, E/Q = up/down)
-    _e("KeyW", "translate_x_pos", "held", "+x (forward)", "translate"),
-    _e("KeyS", "translate_x_neg", "held", "-x (back)", "translate"),
+    # held / translate (spine §5: W/S = forward/back, A/D = left/right, E/Q = up/down).
+    # The axis names below are the KEY axes (x forward, y left, z up); which physical
+    # frame they land on is the runtime's `control.translate_frame` (default the
+    # operator-fixed WORLD frame — decision of 2026-09-08 evening, superseding that
+    # morning's wrist-camera default; `camera` / `base` stay selectable) — see
+    # runtime control/teleop.py.
+    _e("KeyW", "translate_x_pos", "held", "forward", "translate"),
+    _e("KeyS", "translate_x_neg", "held", "back", "translate"),
     _e("KeyA", "translate_y_pos", "held", "left", "translate"),
     _e("KeyD", "translate_y_neg", "held", "right", "translate"),
     _e("KeyE", "translate_z_pos", "held", "up", "translate"),
@@ -81,6 +92,11 @@ KEYMAP: tuple[KeymapEntry, ...] = (
     _e("KeyZ", "switch_arm_prev", "discrete", "previous arm", "session", gamepad="LB"),
     _e("Tab", "switch_arm", "discrete", "switch active arm", "session", gamepad="RB"),
     _e("Space", "takeover_toggle", "discrete", _SPACE_LABEL, "session"),
+    # 2026-09-08 (operator request): one key that walks the workcell back to the
+    # designated initial-condition profile (twin-planned, gated, cancelled by any
+    # movement input). A no-op — nacked with a reason — when no initial condition
+    # is designated for this workcell kind.
+    _e("KeyR", "reset_to_initial", "discrete", "return to the initial condition", "session"),
     # discrete / episode (always listed; runtime nacks without a recorder)
     _e("KeyN", "episode_new", "discrete", "start new episode", "episode"),
     _e("Enter", "episode_save", "discrete", "save current episode", "episode"),
@@ -95,7 +111,11 @@ DISCRETE_CODES: dict[str, str] = {e.code: e.action for e in KEYMAP if e.kind == 
 # ``held_to_twist`` ignores them.
 HELD_MODIFIER_ACTIONS: frozenset[str] = frozenset({"tracker_clutch"})
 
-# Held axis action -> (axis, sign). Sign conventions (documented, binding here):
+# Held axis action -> (axis, sign). Sign conventions (documented, binding here).
+# These are the KEY axes, resolved into a physical frame by the runtime
+# (`control.translate_frame`; default = the operator-fixed world frame since
+# 2026-09-08 evening; the arm's wrist-camera frame and the arm-base axes are the
+# selectable alternatives):
 #   x: +1 forward          y: +1 left            z: +1 up
 #   roll/pitch/yaw: +1 = the *_pos action, about TCP axes
 #   gripper: axis is open-fraction rate — open = +1, close = -1 (toward closed)

@@ -5,7 +5,7 @@
     "gamepad": null,
     "group": "translate",
     "kind": "held",
-    "label": "+x (forward)",
+    "label": "forward",
     "requires_rail": false
   },
   {
@@ -14,7 +14,7 @@
     "gamepad": null,
     "group": "translate",
     "kind": "held",
-    "label": "-x (back)",
+    "label": "back",
     "requires_rail": false
   },
   {
@@ -177,6 +177,15 @@
     "group": "session",
     "kind": "discrete",
     "label": "takeover toggle (DAgger: recorded; inference: safety escape, never recorded)",
+    "requires_rail": false
+  },
+  {
+    "action": "reset_to_initial",
+    "code": "KeyR",
+    "gamepad": null,
+    "group": "session",
+    "kind": "discrete",
+    "label": "return to the initial condition",
     "requires_rail": false
   },
   {

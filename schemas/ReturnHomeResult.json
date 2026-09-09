@@ -1,0 +1,52 @@
+{
+  "description": "``POST /api/session/return_home`` response (04-runtime \u00a710.5; 2026-09-08).\n\nThe synchronous \"walk the workcell back to its designated initial condition\"\nop the Cockpit runs BEFORE it tears a session down, and the same motion the\n``reset_to_initial`` key fires. ``ok`` is what the UI branches on: false \u21d2\nthe arms are NOT at the initial condition and the operator has to be told\n(the Cockpit shows a dialog and offers to end the session anyway, after\nwhich the arms may be moved from UFACTORY Studio \u2014 never during a session).\n\n``status`` distinguishes *why*: ``done`` \u2014 arrived; ``skipped`` \u2014 nothing to\ndo (no initial-condition profile for this workcell kind, or already there),\nwhich is a success; ``failed`` \u2014 the twin could not plan a collision-free\npath (or an arm is faulted); ``cancelled`` \u2014 operator input interrupted the\nmotion; ``timeout`` \u2014 the gate held the motion past its budget, the arms\nwere stopped where they are; ``refused`` \u2014 a precondition said no (an\nepisode is still recording, no session).",
+  "properties": {
+    "arms": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Arms",
+      "type": "array"
+    },
+    "detail": {
+      "default": "",
+      "title": "Detail",
+      "type": "string"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "profile_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Profile Id"
+    },
+    "status": {
+      "enum": [
+        "done",
+        "skipped",
+        "failed",
+        "cancelled",
+        "timeout",
+        "refused"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ok",
+    "status"
+  ],
+  "title": "ReturnHomeResult",
+  "type": "object"
+}

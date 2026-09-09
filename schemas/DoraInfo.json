@@ -1,0 +1,172 @@
+{
+  "$defs": {
+    "DoraMachineInfo": {
+      "description": "One configured remote consumer machine (``dora.machines``; 14-dora \u00a72.6/\u00a79, \u00a716.1).\n\n``registered`` = its daemon is registered at the coordinator (rescan); ``joined`` = its\nplaceholders are rendered in the running dataflow (after ``POST /api/dora/machines/\n{id}/join`` and the remote consumer's attach cleared dora's multi-machine start barrier);\n``detail`` explains a refused / expired join.",
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "joined": {
+          "default": false,
+          "title": "Joined",
+          "type": "boolean"
+        },
+        "placeholders": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Placeholders",
+          "type": "array"
+        },
+        "registered": {
+          "default": false,
+          "title": "Registered",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "DoraMachineInfo",
+      "type": "object"
+    }
+  },
+  "description": "``GET /api/dora`` (14-dora \u00a72.6): connection facts for foreign clients. The\nauth token is deliberately NOT part of this model (\u00a79).",
+  "properties": {
+    "auth": {
+      "default": false,
+      "title": "Auth",
+      "type": "boolean"
+    },
+    "bind_host": {
+      "default": "127.0.0.1",
+      "title": "Bind Host",
+      "type": "string"
+    },
+    "coordinator_addr": {
+      "default": "127.0.0.1",
+      "title": "Coordinator Addr",
+      "type": "string"
+    },
+    "coordinator_port": {
+      "default": 6113,
+      "title": "Coordinator Port",
+      "type": "integer"
+    },
+    "daemon_port": {
+      "default": 53391,
+      "title": "Daemon Port",
+      "type": "integer"
+    },
+    "dataflow_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataflow Id"
+    },
+    "dataflow_name": {
+      "default": "mavis_v2",
+      "title": "Dataflow Name",
+      "type": "string"
+    },
+    "dataflow_restarts": {
+      "default": 0,
+      "title": "Dataflow Restarts",
+      "type": "integer"
+    },
+    "dataflow_yaml": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataflow Yaml"
+    },
+    "detail": {
+      "default": "",
+      "title": "Detail",
+      "type": "string"
+    },
+    "enabled": {
+      "default": false,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "machine_id": {
+      "default": "lab",
+      "title": "Machine Id",
+      "type": "string"
+    },
+    "machines": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DoraMachineInfo"
+      },
+      "title": "Machines",
+      "type": "array"
+    },
+    "mavis_schema": {
+      "default": 1,
+      "title": "Mavis Schema",
+      "type": "integer"
+    },
+    "node_id": {
+      "default": "mavis_runtime",
+      "title": "Node Id",
+      "type": "string"
+    },
+    "placeholders": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Placeholders",
+      "type": "array"
+    },
+    "reattach_count": {
+      "default": 0,
+      "title": "Reattach Count",
+      "type": "integer"
+    },
+    "state": {
+      "default": "disabled",
+      "enum": [
+        "disabled",
+        "unavailable",
+        "attached",
+        "detached",
+        "closed"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "zenoh_connect": {
+      "default": "tcp/127.0.0.1:7447",
+      "title": "Zenoh Connect",
+      "type": "string"
+    },
+    "zenoh_port": {
+      "default": 7447,
+      "title": "Zenoh Port",
+      "type": "integer"
+    }
+  },
+  "title": "DoraInfo",
+  "type": "object"
+}

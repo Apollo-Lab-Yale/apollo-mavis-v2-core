@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "DatasetExportInfo": {
+      "description": "``manifest.last_export`` as the REST sees it (10-frames \u00a711.5; 04-runtime \u00a710.6).\n\n``state``: ``none`` = never exported, ``fresh`` = the export matches the episode\nset, ``stale`` = an episode was added / deleted since, ``running`` = the export\njob is on it right now (process-local), ``failed`` = the last job failed\n(``detail`` carries the reason, until the next success).",
+      "properties": {
+        "at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "At"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "episodes": {
+          "default": 0,
+          "title": "Episodes",
+          "type": "integer"
+        },
+        "format": {
+          "default": "lerobot_v3",
+          "title": "Format",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "state": {
+          "enum": [
+            "none",
+            "stale",
+            "fresh",
+            "running",
+            "failed"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "DatasetExportInfo",
+      "type": "object"
+    }
+  },
+  "description": "``GET /api/datasets`` row (2026-09-07; 04-runtime \u00a710.6, 10-frames \u00a711): one\ndataset under ``datasets_root``, read from ``manifest.json`` + the per-episode\n``episode.json`` sidecars \u2014 no lerobot import, so the list is cheap. ``layout``\n``episode_dirs`` is the primary per-episode store; ``lerobot_v3`` is a legacy\nphase-07 tree (``meta/info.json``), listed read-only. ``kind`` / ``task`` come\nfrom the most recent ``sessions/session_*.json`` sidecar (None without one).\n``in_use`` = the active session records into it (deleting the OPEN episode is\nthen 409; every other episode can go).\n\n``namespace`` / ``path`` (additive, 2026-09-08; 15-online-dagger D5): dataset roots\nare per-namespace now (``bc_demo/<name>`` -> ``~/data/bc_demo/<name>``,\n``online_dagger/<s>`` -> ``~/data/online_dagger/<s>/rollouts``, everything else under\n``datasets_root/<ns>/<name>``), so the row spells its namespace and the REAL\nfolder for the UI to show; both default to \"\" so an older runtime still\nvalidates (``root`` keeps meaning the absolute dataset directory).",
+  "properties": {
+    "arms": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Arms",
+      "type": "array"
+    },
+    "cameras": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Cameras",
+      "type": "array"
+    },
+    "export": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DatasetExportInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "fps": {
+      "title": "Fps",
+      "type": "integer"
+    },
+    "in_use": {
+      "default": false,
+      "title": "In Use",
+      "type": "boolean"
+    },
+    "kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "hardware",
+            "sim"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Kind"
+    },
+    "layout": {
+      "default": "episode_dirs",
+      "enum": [
+        "episode_dirs",
+        "lerobot_v3"
+      ],
+      "title": "Layout",
+      "type": "string"
+    },
+    "modified_at": {
+      "title": "Modified At",
+      "type": "string"
+    },
+    "namespace": {
+      "default": "",
+      "title": "Namespace",
+      "type": "string"
+    },
+    "path": {
+      "default": "",
+      "title": "Path",
+      "type": "string"
+    },
+    "repo_id": {
+      "title": "Repo Id",
+      "type": "string"
+    },
+    "robot_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Robot Type"
+    },
+    "root": {
+      "title": "Root",
+      "type": "string"
+    },
+    "task": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Task"
+    },
+    "total_episodes": {
+      "title": "Total Episodes",
+      "type": "integer"
+    },
+    "total_frames": {
+      "title": "Total Frames",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "repo_id",
+    "root",
+    "total_episodes",
+    "total_frames",
+    "fps",
+    "modified_at"
+  ],
+  "title": "DatasetInfo",
+  "type": "object"
+}

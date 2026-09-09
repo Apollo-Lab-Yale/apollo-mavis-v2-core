@@ -115,6 +115,11 @@ class CameraFrame:
     t_mono: float
     wallclock_ns: int
     seq: int = 0
+    # additive (phase-12; 14-dora §4.2 "Depth"): an aligned depth image, (H, W) uint16 in
+    # units of ``depth_scale_m`` (mm at the default), same H/W as ``rgb``; None = the
+    # producer has no depth (v4l2 / sim colour-only). Recorder and VideoHub ignore it.
+    depth: np.ndarray | None = None
+    depth_scale_m: float = 0.001
 
     def __post_init__(self) -> None:
         rgb = np.asarray(self.rgb)
@@ -123,3 +128,16 @@ class CameraFrame:
         if rgb.dtype != np.uint8:
             raise ValueError(f"rgb must be uint8, got {rgb.dtype}")
         object.__setattr__(self, "rgb", _freeze(rgb))
+        if self.depth is not None:
+            depth = np.asarray(self.depth)
+            if depth.shape != rgb.shape[:2]:
+                raise ValueError(
+                    f"depth must have shape {rgb.shape[:2]} (the rgb H, W), got {depth.shape}"
+                )
+            if depth.dtype != np.uint16:
+                raise ValueError(f"depth must be uint16, got {depth.dtype}")
+            object.__setattr__(self, "depth", _freeze(depth))
+        scale = float(self.depth_scale_m)
+        if not np.isfinite(scale) or scale <= 0.0:
+            raise ValueError(f"depth_scale_m must be > 0, got {self.depth_scale_m}")
+        object.__setattr__(self, "depth_scale_m", scale)

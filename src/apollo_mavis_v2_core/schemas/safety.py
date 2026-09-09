@@ -102,15 +102,39 @@ class PlanRequest(BaseModel):
     arm_order: list[str] | None = None  # None -> planner heuristic
     timeout_s: float = 5.0  # per arm
     max_step_rad: float = 0.05  # edge-check resolution (rail 0.01 m)
+    # The ``SessionSpec.speed_scale`` the plan will be executed at (additive, 2026-09-09).
+    # The gate's escape rule demands a strict opening on EVERY executor tick of an arm
+    # inside the inflation shell, and a slower session has smaller ticks, so the planner
+    # judges an escape from a pinched start at this speed; a plan judged at a slower speed
+    # stays valid at any faster one. Default: the slowest speed the runtime offers.
+    speed_scale: float = Field(default=0.1, gt=0, le=1)
 
 
 class PlanResult(BaseModel):
-    """Planner outcome; waypoints per arm on success."""
+    """Planner outcome; waypoints per arm on success.
+
+    ``arm_order`` is the order the sequential planner validated: arm k was
+    planned with arms < k frozen at their GOALS and arms > k at their STARTS,
+    so the per-arm paths are collision-free ONLY when executed in this order,
+    one arm after another (never simultaneously; 11-safety §9). Executors MUST
+    honour it. Empty on failure. Additive (2026-09-08): a ``reset_to_initial``
+    on the real cell executed both arms' waypoints at once through combinations
+    the planner never validated and sat gate-blocked until the budget.
+
+    ``failure == "no_escape"`` (additive, 2026-09-09): the arm starts inside the
+    inflation shell and the planner's escape phase — which mirrors the gate's
+    strict-opening rule (11-safety §7.1 step 6 / §9) — found no step that opens
+    every pinched pair without closing another; ``failing_pair`` names the
+    tightest pair. The arm is boxed in: nothing is safe to execute.
+    """
 
     ok: bool
     waypoints: dict[str, list[list[float]]] = {}
-    failure: Literal["goal_in_collision", "start_in_collision", "timeout"] | None = None
+    failure: (
+        Literal["goal_in_collision", "start_in_collision", "no_escape", "timeout"] | None
+    ) = None
     failing_pair: tuple[str, str] | None = None
+    arm_order: list[str] = []
 
 
 __all__ = [

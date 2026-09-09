@@ -1,0 +1,20 @@
+{
+  "additionalProperties": false,
+  "description": "Args for ``name == \"switch_arm\"`` (optional; empty args = cycle).\n\n``arm_id`` makes the switch EXPLICIT and idempotent, which is what a UI\ncontrol needs: the Cockpit's arm rows are clickable (2026-09-07) and a\nclick must land on the arm the operator clicked whatever the session's arm\norder is. Keyboard Tab / gamepad RB keep sending no args and keep cycling.\nAn unknown id is refused (``ack.ok == false``) \u2014 the active arm never\nchanges silently. ``switch_arm_prev`` takes no args.\n\n``extra=\"forbid\"`` keeps the guarantee this action had before it grew an\nargs model: anything but ``arm_id`` is a client bug and is rejected rather\nthan silently ignored (pydantic's default).",
+  "properties": {
+    "arm_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Arm Id"
+    }
+  },
+  "title": "SwitchArmArgs",
+  "type": "object"
+}

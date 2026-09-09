@@ -1,0 +1,16 @@
+{
+  "additionalProperties": false,
+  "description": "Args for ``name == \"goto_profile\"`` (2026-09-08).\n\nMove the session's arms to the SAVED profile ``profile_id`` \u2014 operator-\nrequested motion only: the runtime plans it on the twin and executes it\nthrough the same gated, cancellable path as return-to-initial (04-runtime\n\u00a710.5). Unlike ``set_initial_condition`` there is no \"current state\"\ndefault, so ``profile_id`` is REQUIRED. Its pattern is the ProfileStore id\ncharset (uuid4 hex; also the ``profile:<id>`` half of ``START_FROM_RE``),\nso a malformed id is refused at the wire (``ack.ok == false``) instead of\nsurfacing as a store error later.\n\n``extra=\"forbid\"``: anything but ``profile_id`` is a client bug and is\nrejected rather than silently ignored (pydantic's default).",
+  "properties": {
+    "profile_id": {
+      "pattern": "^[A-Za-z0-9_\\-]+$",
+      "title": "Profile Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "profile_id"
+  ],
+  "title": "GotoProfileArgs",
+  "type": "object"
+}

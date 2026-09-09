@@ -1,0 +1,546 @@
+{
+  "$defs": {
+    "ActionFilterConfig": {
+      "description": "Idle-frame filter parameters (10-frames \u00a711.4; 04-runtime \u00a710.5; 2026-09-07,\noperator): the pro-dagger hesitation heuristic ported to the frame stream. A\ncandidate frame whose commanded TCP (Chebyshev over xyz / geodesic angle),\ngripper fraction and rail slot are all within the epsilons of the LAST KEPT\nframe \u2014 and that has no gripper change within \u00b1``gripper_context_s`` \u2014 is not\nrecorded. Defaults = pro-dagger's 1 mm / 1e-3 / 1 mm per step and its one\nH=16 chunk at 10 Hz of gripper context; ``enabled: false`` records every\nframe. DAgger filters human-controlled frames only.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "gripper_context_s": {
+          "default": 1.6,
+          "minimum": 0,
+          "title": "Gripper Context S",
+          "type": "number"
+        },
+        "gripper_eps_frac": {
+          "default": 0.01,
+          "minimum": 0,
+          "title": "Gripper Eps Frac",
+          "type": "number"
+        },
+        "pos_eps_m": {
+          "default": 0.001,
+          "minimum": 0,
+          "title": "Pos Eps M",
+          "type": "number"
+        },
+        "rail_eps_m": {
+          "default": 0.001,
+          "minimum": 0,
+          "title": "Rail Eps M",
+          "type": "number"
+        },
+        "rot_eps_rad": {
+          "default": 0.001,
+          "minimum": 0,
+          "title": "Rot Eps Rad",
+          "type": "number"
+        }
+      },
+      "title": "ActionFilterConfig",
+      "type": "object"
+    },
+    "CameraAnnounce": {
+      "description": "One camera of the session (``SessionAnnounce.cameras``).",
+      "properties": {
+        "T_E_C": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "T E C"
+        },
+        "T_W_C": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "T W C"
+        },
+        "depth": {
+          "default": false,
+          "title": "Depth",
+          "type": "boolean"
+        },
+        "distortion": {
+          "default": [],
+          "items": {
+            "type": "number"
+          },
+          "title": "Distortion",
+          "type": "array"
+        },
+        "fps": {
+          "title": "Fps",
+          "type": "number"
+        },
+        "frame_ref": {
+          "title": "Frame Ref",
+          "type": "string"
+        },
+        "intrinsics": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Intrinsics"
+        },
+        "mount": {
+          "title": "Mount",
+          "type": "string"
+        },
+        "resolution": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Resolution",
+          "type": "array"
+        }
+      },
+      "required": [
+        "resolution",
+        "fps",
+        "frame_ref",
+        "mount"
+      ],
+      "title": "CameraAnnounce",
+      "type": "object"
+    },
+    "OnlineDaggerAnnounce": {
+      "description": "``SessionAnnounce.online_dagger`` (15-online-dagger \u00a76): the paths the trainer node\nneeds \u2014 the session directory and the rollouts dataset it reads (a MAVIS\nepisode-directory dataset with the ``actor`` column). The trainer keeps its own\nartefacts wherever it likes (the skill suggests ``<session_dir>/trainer/``; the\nruntime never reads them). Field order is the contract (both goldens pin it).",
+      "properties": {
+        "rollouts_dir": {
+          "title": "Rollouts Dir",
+          "type": "string"
+        },
+        "session_dir": {
+          "title": "Session Dir",
+          "type": "string"
+        },
+        "session_name": {
+          "title": "Session Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_name",
+        "session_dir",
+        "rollouts_dir"
+      ],
+      "title": "OnlineDaggerAnnounce",
+      "type": "object"
+    },
+    "OnlineDaggerConfig": {
+      "additionalProperties": false,
+      "description": "Online DAgger session parameters (15-online-dagger \u00a75; phase-14, 2026-09-08).\n\nThe runtime is the algorithm-agnostic SHELL (operator decision 2026-09-08): it\nperforms rollouts, exposes take-over / hand-back, labels every step novice /\nexpert, saves the kept rollouts and reports what the trainer says. Which DAgger\nvariant runs, its hyper-parameters and every training artefact belong to the\ntrainer node in the policy repo, so this block carries NO algorithm settings\n\u2014 only what the shell itself needs: the session directory name, whether an\nexisting one is continued, and the two generic gates on ``episode_new``.\n\n``extra=\"forbid\"``: an unknown key is a 422 at POST, never silently dropped \u2014\na hyper-parameter typed here by mistake would otherwise vanish while the\noperator believes it travelled (the trainer configures itself; the runtime\nnever forwards hyper-parameters).",
+      "properties": {
+        "pause_while_training": {
+          "default": true,
+          "title": "Pause While Training",
+          "type": "boolean"
+        },
+        "resume": {
+          "default": false,
+          "title": "Resume",
+          "type": "boolean"
+        },
+        "session_name": {
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_\\-]*$",
+          "title": "Session Name",
+          "type": "string"
+        },
+        "wait_for_trainer_ready": {
+          "default": true,
+          "title": "Wait For Trainer Ready",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "session_name"
+      ],
+      "title": "OnlineDaggerConfig",
+      "type": "object"
+    },
+    "SessionSpec": {
+      "description": "POST /api/session body.",
+      "properties": {
+        "action_filter": {
+          "$ref": "#/$defs/ActionFilterConfig",
+          "default": {
+            "enabled": true,
+            "gripper_context_s": 1.6,
+            "gripper_eps_frac": 0.01,
+            "pos_eps_m": 0.001,
+            "rail_eps_m": 0.001,
+            "rot_eps_rad": 0.001
+          }
+        },
+        "arms": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Arms",
+          "type": "array"
+        },
+        "dataset": {
+          "anyOf": [
+            {
+              "pattern": "^(?:[A-Za-z0-9][A-Za-z0-9_\\-]*/)?[A-Za-z0-9][A-Za-z0-9_\\-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataset"
+        },
+        "dataset_resume": {
+          "default": false,
+          "title": "Dataset Resume",
+          "type": "boolean"
+        },
+        "digital_twin_scene": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Digital Twin Scene"
+        },
+        "frames": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Frames",
+          "type": "object"
+        },
+        "kind": {
+          "enum": [
+            "hardware",
+            "sim"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "teleop",
+            "collect",
+            "dagger",
+            "inference"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "online_dagger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnlineDaggerConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Policy"
+        },
+        "policy_source": {
+          "default": "checkpoint",
+          "enum": [
+            "checkpoint",
+            "external"
+          ],
+          "title": "Policy Source",
+          "type": "string"
+        },
+        "return_to_start": {
+          "default": true,
+          "title": "Return To Start",
+          "type": "boolean"
+        },
+        "sim_scene": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sim Scene"
+        },
+        "speed_scale": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Speed Scale",
+          "type": "number"
+        },
+        "start_from": {
+          "default": "keep_current",
+          "title": "Start From",
+          "type": "string"
+        },
+        "task": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Task"
+        }
+      },
+      "required": [
+        "mode",
+        "kind",
+        "arms",
+        "frames"
+      ],
+      "title": "SessionSpec",
+      "type": "object"
+    }
+  },
+  "description": "The ``session`` stream payload (14-dora \u00a74.2): the contract message a late\njoiner learns everything from (sent on every state change + 1 Hz).",
+  "properties": {
+    "action_names": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Action Names",
+      "type": "array"
+    },
+    "action_space": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Action Space"
+    },
+    "arm_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Arm Ids",
+      "type": "array"
+    },
+    "camera_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Camera Ids",
+      "type": "array"
+    },
+    "cameras": {
+      "additionalProperties": {
+        "$ref": "#/$defs/CameraAnnounce"
+      },
+      "default": {},
+      "title": "Cameras",
+      "type": "object"
+    },
+    "dataset_root": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataset Root"
+    },
+    "deprecated_keys": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Deprecated Keys",
+      "type": "array"
+    },
+    "epoch": {
+      "title": "Epoch",
+      "type": "string"
+    },
+    "frames": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "title": "Frames",
+      "type": "object"
+    },
+    "has_rail": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "default": {},
+      "title": "Has Rail",
+      "type": "object"
+    },
+    "kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "hardware",
+            "sim"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Kind"
+    },
+    "mavis_schema": {
+      "default": 1,
+      "title": "Mavis Schema",
+      "type": "integer"
+    },
+    "online_dagger": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OnlineDaggerAnnounce"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "policy_source": {
+      "anyOf": [
+        {
+          "enum": [
+            "checkpoint",
+            "external"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Policy Source"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Id"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Session Id"
+    },
+    "spec": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SessionSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "state_names": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "State Names",
+      "type": "array"
+    }
+  },
+  "required": [
+    "epoch",
+    "session_id",
+    "state"
+  ],
+  "title": "SessionAnnounce",
+  "type": "object"
+}

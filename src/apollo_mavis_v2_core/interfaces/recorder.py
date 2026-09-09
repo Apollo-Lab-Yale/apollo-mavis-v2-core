@@ -1,7 +1,8 @@
 """Episode recorder facade (design doc 01-core §5.2).
 
-The runtime implements this over LeRobotDataset v3 (lerobot lives THERE,
-never in core).
+The runtime implements this over the episode-directory store (10-frames §11:
+one ``episodes/<episode_id>/`` per saved episode; LeRobot v3 is a derived
+export). lerobot lives THERE, never in core.
 """
 
 from __future__ import annotations
@@ -14,25 +15,41 @@ class EpisodeRecorder(ABC):
 
     @abstractmethod
     def start(self, meta: dict[str, object]) -> None:
-        """Open a new episode buffer."""
+        """Open a new episode buffer (mints the ``episode_id``; no filesystem op)."""
+
+    def prepare(self) -> None:
+        """Optional: open the episode's temp directory + video encoder BEFORE the
+        first frame — called on the recorder thread right after ``episode_new`` so
+        the encoder's start stall lands there, not under a moving arm (04-runtime
+        §10.1). Default: nothing; ``add_frame`` must then open lazily."""
+        return None
 
     @abstractmethod
     def add_frame(self, frame: dict[str, object]) -> None:
-        """Append one frame (-> ``LeRobotDataset.add_frame``)."""
+        """Append one frame: buffer the rows, feed the video encoder."""
 
     @abstractmethod
-    def save(self) -> int:
-        """Commit the buffer; returns the episode_index (``save_episode``)."""
+    def save(self, sidecar: dict[str, object], audio: object | None = None) -> tuple[int, str]:
+        """Publish ``episodes/<episode_id>/`` atomically: videos, ``frames.parquet``,
+        stats, ``audio.wav`` (from ``audio``), then ``episode.json`` = ``sidecar`` +
+        the video / audio / stats blocks LAST, then the rename. Returns
+        ``(ordinal in capture order, episode_id)``."""
 
     @abstractmethod
     def discard(self) -> None:
-        """Drop the buffer (``clear_episode_buffer``)."""
+        """Cancel the encoder and remove the temp directory; nothing is left."""
 
     @abstractmethod
     def finalize(self) -> None:
-        """MANDATORY at session end (writes parquet footers)."""
+        """Idempotent close: discard an open episode, close the encoder, sweep
+        stale ``.tmp-*`` directories."""
 
     @property
     @abstractmethod
     def recording(self) -> bool:
         """True while an episode buffer is open."""
+
+    @property
+    @abstractmethod
+    def episode_id(self) -> str | None:
+        """The open episode's id (10-frames §11.3), None when idle."""

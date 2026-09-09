@@ -27,6 +27,22 @@
     "profile_id": {
       "title": "Profile Id",
       "type": "string"
+    },
+    "workcell_kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "hardware",
+            "sim"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workcell Kind"
     }
   },
   "required": [

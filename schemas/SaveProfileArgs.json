@@ -1,5 +1,5 @@
 {
-  "description": "Args for ``name == \"save_profile\"``.",
+  "description": "Args for ``name == \"save_profile\"``.\n\n``set_initial`` designates the saved profile as the workcell's initial\ncondition in the same round trip (2026-09-07): the Cockpit has ONE profile\nbutton now \u2014 \"Save current state as profile\" with a name field and an\noptional \"use as initial condition\" switch \u2014 instead of the two buttons\n(\"Save profile\u2026\" / \"Set current state as initial condition\") whose\ndifference nobody could see. ``set_initial_condition`` stays on the wire\nfor designating an EXISTING profile by id.",
   "properties": {
     "name": {
       "title": "Name",
@@ -9,6 +9,11 @@
       "default": "",
       "title": "Notes",
       "type": "string"
+    },
+    "set_initial": {
+      "default": false,
+      "title": "Set Initial",
+      "type": "boolean"
     }
   },
   "required": [

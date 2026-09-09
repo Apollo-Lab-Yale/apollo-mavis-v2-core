@@ -44,6 +44,8 @@ select = ["E", "F", "I", "UP", "B", "TID251"]
 "mink".msg = "core must not import mink"
 "zmq".msg = "core must not import zmq"
 "websockets".msg = "core must not import websockets"
+"dora".msg = "core must not import dora (the runtime's dora_bridge is the only import site)"
+"pyarrow".msg = "core must not import pyarrow (dora payload codec lives in the runtime)"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

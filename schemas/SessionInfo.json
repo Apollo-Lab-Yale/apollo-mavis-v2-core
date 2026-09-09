@@ -1,4 +1,38 @@
 {
+  "$defs": {
+    "OnlineDaggerConfig": {
+      "additionalProperties": false,
+      "description": "Online DAgger session parameters (15-online-dagger \u00a75; phase-14, 2026-09-08).\n\nThe runtime is the algorithm-agnostic SHELL (operator decision 2026-09-08): it\nperforms rollouts, exposes take-over / hand-back, labels every step novice /\nexpert, saves the kept rollouts and reports what the trainer says. Which DAgger\nvariant runs, its hyper-parameters and every training artefact belong to the\ntrainer node in the policy repo, so this block carries NO algorithm settings\n\u2014 only what the shell itself needs: the session directory name, whether an\nexisting one is continued, and the two generic gates on ``episode_new``.\n\n``extra=\"forbid\"``: an unknown key is a 422 at POST, never silently dropped \u2014\na hyper-parameter typed here by mistake would otherwise vanish while the\noperator believes it travelled (the trainer configures itself; the runtime\nnever forwards hyper-parameters).",
+      "properties": {
+        "pause_while_training": {
+          "default": true,
+          "title": "Pause While Training",
+          "type": "boolean"
+        },
+        "resume": {
+          "default": false,
+          "title": "Resume",
+          "type": "boolean"
+        },
+        "session_name": {
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_\\-]*$",
+          "title": "Session Name",
+          "type": "string"
+        },
+        "wait_for_trainer_ready": {
+          "default": true,
+          "title": "Wait For Trainer Ready",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "session_name"
+      ],
+      "title": "OnlineDaggerConfig",
+      "type": "object"
+    }
+  },
   "description": "POST/GET /api/session response.",
   "properties": {
     "arms": {
@@ -10,6 +44,11 @@
     },
     "epoch": {
       "title": "Epoch",
+      "type": "string"
+    },
+    "fault_detail": {
+      "default": "",
+      "title": "Fault Detail",
       "type": "string"
     },
     "kind": {
@@ -29,6 +68,26 @@
         "inference"
       ],
       "title": "Mode",
+      "type": "string"
+    },
+    "online_dagger": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OnlineDaggerConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "policy_source": {
+      "default": "checkpoint",
+      "enum": [
+        "checkpoint",
+        "external"
+      ],
+      "title": "Policy Source",
       "type": "string"
     },
     "session_id": {

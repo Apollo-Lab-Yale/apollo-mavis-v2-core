@@ -4,7 +4,7 @@
     "filter_beta": {
       "anyOf": [
         {
-          "maximum": 5.0,
+          "maximum": 200.0,
           "minimum": 0.0,
           "type": "number"
         },

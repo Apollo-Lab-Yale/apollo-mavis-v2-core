@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from apollo_mavis_v2_core.errors import ConfigError
 from apollo_mavis_v2_core.schemas.config import PoseModel, load_workcell_config
-from apollo_mavis_v2_core.schemas.safety import CollisionReport, SafetyConfig
+from apollo_mavis_v2_core.schemas.safety import CollisionReport, PlanResult, SafetyConfig
 from apollo_mavis_v2_core.types import Pose
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -245,6 +245,47 @@ def test_safety_config_validators():
     with pytest.raises(ValueError):
         SafetyConfig(enabled=False, safety_debug=True)
     assert SafetyConfig(enabled=False).safety_debug is False  # sim may disable
+
+
+def test_plan_result_arm_order_is_additive_and_round_trips():
+    """``arm_order`` (2026-09-08): the sequential planner's validated order.
+
+    Additive with an empty default so pre-existing producers / stored results
+    still parse; a fresh list per instance (pydantic copies mutable defaults);
+    survives a JSON round trip alongside the waypoints whose insertion order
+    it mirrors.
+    """
+    legacy = PlanResult.model_validate({"ok": True, "waypoints": {"grip": [[0.0] * 8]}})
+    assert legacy.arm_order == []
+    assert PlanResult(ok=False, failure="timeout").arm_order == []
+    a, b = PlanResult(ok=True), PlanResult(ok=True)
+    a.arm_order.append("grip")
+    assert b.arm_order == []  # no shared mutable default
+
+    res = PlanResult(
+        ok=True,
+        waypoints={"view": [[0.0] * 8, [0.1] * 8], "grip": [[0.0] * 8]},
+        arm_order=["view", "grip"],
+    )
+    back = PlanResult.model_validate_json(res.model_dump_json())
+    assert back.arm_order == ["view", "grip"]
+    assert list(back.waypoints) == back.arm_order
+    with pytest.raises(ValidationError):
+        PlanResult(ok=True, arm_order="grip")  # a list of ids, not one id
+
+
+def test_plan_result_no_escape_failure_kind():
+    """``no_escape`` (2026-09-09): a pinched start the planner's gate-mirroring escape
+    cannot open; additive next to the three original kinds, names the tightest pair."""
+    pair = ("grip_right_finger", "view_link3")
+    res = PlanResult(ok=False, failure="no_escape", failing_pair=pair)
+    assert res.failure == "no_escape" and res.waypoints == {} and res.arm_order == []
+    back = PlanResult.model_validate_json(res.model_dump_json())
+    assert back.failure == "no_escape" and back.failing_pair == pair
+    for kind in ("goal_in_collision", "start_in_collision", "timeout"):
+        assert PlanResult(ok=False, failure=kind).failure == kind
+    with pytest.raises(ValidationError):
+        PlanResult(ok=False, failure="boxed_in")
 
 
 def test_v4l2_camera_by_usb_serial_and_fourcc():

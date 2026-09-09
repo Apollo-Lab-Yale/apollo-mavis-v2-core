@@ -84,6 +84,14 @@ class EpisodeSummary:
     takeover_segments: int  # maximal runs of control_mode != POLICY
     segment_doubts: list[float]  # policy-action variance at takeover instants
     success: bool | None
+    episode_id: str = ""  # 10-frames §11.3 directory id (2026-09-07); the spool is
+    #   ``trainer_spool/ep_<episode_id>.parquet``; ``episode_index`` stays the
+    #   capture-order ordinal the trainer watermark uses (12-dagger §7)
+    # Online DAgger actor split (additive, phase-14; 15-online-dagger §4): frames with the
+    # ``actor`` column 1 (expert: control_mode != POLICY) / 0 (novice: the policy drove).
+    # ``n_expert_frames`` counts transition frames too, unlike ``n_label_frames``.
+    n_expert_frames: int = 0
+    n_novice_frames: int = 0
 
 
 class TrainerStatus(BaseModel):

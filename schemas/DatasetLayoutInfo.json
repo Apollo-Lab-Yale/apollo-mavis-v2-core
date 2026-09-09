@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "DatasetNamespaceInfo": {
+      "description": "One mapped dataset namespace (``DatasetLayoutInfo.namespaces[ns]``; 15-online-dagger\n\u00a77 / D5): its datasets live at ``<root>/<name>`` or, with ``subdir``, at\n``<root>/<name>/<subdir>`` (``online_dagger`` -> ``~/data/online_dagger/<s>/rollouts``).",
+      "properties": {
+        "root": {
+          "title": "Root",
+          "type": "string"
+        },
+        "subdir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subdir"
+        }
+      },
+      "required": [
+        "root"
+      ],
+      "title": "DatasetNamespaceInfo",
+      "type": "object"
+    }
+  },
+  "description": "``GET /api/datasets/layout`` (15-online-dagger \u00a77; 2026-09-08): where datasets live,\nso the UI shows the REAL folder in its previews and never hard-codes a\nnamespace. A bare ``dataset: \"<name>\"`` resolves into ``default_namespace``;\na namespace absent from ``namespaces`` lives at ``<generic_root>/<ns>/<name>``.",
+  "properties": {
+    "default_namespace": {
+      "title": "Default Namespace",
+      "type": "string"
+    },
+    "generic_root": {
+      "title": "Generic Root",
+      "type": "string"
+    },
+    "namespaces": {
+      "additionalProperties": {
+        "$ref": "#/$defs/DatasetNamespaceInfo"
+      },
+      "title": "Namespaces",
+      "type": "object"
+    }
+  },
+  "required": [
+    "default_namespace",
+    "generic_root",
+    "namespaces"
+  ],
+  "title": "DatasetLayoutInfo",
+  "type": "object"
+}

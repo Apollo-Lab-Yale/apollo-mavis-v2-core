@@ -1,0 +1,79 @@
+{
+  "description": "The ``policy_trainer_status`` input payload (15-online-dagger \u00a76): JSON on the\npolicy node's ``trainer_status`` output, heartbeated at 1 Hz (and on change) while\nan Online DAgger session is announced. Generic by design \u2014 the runtime knows no\nDAgger variant. ``state`` walks idle -> preparing -> ready (the shell lets rollouts\nstart) -> training (``episode_new`` refused while ``pause_while_training``) ->\nready (weights swapped, ``policy_version`` bumped); ``error`` carries ``detail``.\n``session_id`` MUST echo the served ``SessionAnnounce.session_id``: another\nsession's id is ignored outright, ``None`` counts as \"trainer alive\" only.\n``metrics`` is a free-form dict of finite scalars (``loss``, ``proj_rate``, ...)\nthe Cockpit lists verbatim (a ``loss`` key gets the sparkline). Metadata: the\ncommon inbound keys (``client``, ``seq``, ``t_mono``, ``wallclock_ns``,\n``mavis_schema``), same ``seq`` counter as the node's other outputs. Field order\nis the contract (both goldens pin it). Every float refuses inf / nan\n(``allow_inf_nan=False``; a diverged loss is reported as ``state: \"error\"`` +\n``detail``, never as a non-finite number) \u2014 that rule leaves the JSON schema\nalone.",
+  "properties": {
+    "detail": {
+      "default": "",
+      "title": "Detail",
+      "type": "string"
+    },
+    "mavis_schema": {
+      "default": 1,
+      "title": "Mavis Schema",
+      "type": "integer"
+    },
+    "metrics": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "default": {},
+      "title": "Metrics",
+      "type": "object"
+    },
+    "node_version": {
+      "title": "Node Version",
+      "type": "string"
+    },
+    "policy_version": {
+      "default": 0,
+      "title": "Policy Version",
+      "type": "integer"
+    },
+    "progress": {
+      "default": 0.0,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Progress",
+      "type": "number"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    },
+    "state": {
+      "default": "idle",
+      "enum": [
+        "idle",
+        "preparing",
+        "training",
+        "ready",
+        "error"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "trainer_id": {
+      "title": "Trainer Id",
+      "type": "string"
+    },
+    "uptime_s": {
+      "default": 0.0,
+      "minimum": 0,
+      "title": "Uptime S",
+      "type": "number"
+    }
+  },
+  "required": [
+    "trainer_id",
+    "node_version"
+  ],
+  "title": "TrainerStatusAnnounce",
+  "type": "object"
+}

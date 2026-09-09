@@ -1,0 +1,25 @@
+{
+  "description": "``POST /api/datasets/{ns}/{name}/export`` body (04-runtime \u00a713.1).",
+  "properties": {
+    "format": {
+      "const": "lerobot_v3",
+      "default": "lerobot_v3",
+      "title": "Format",
+      "type": "string"
+    },
+    "out": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Out"
+    }
+  },
+  "title": "DatasetExportRequest",
+  "type": "object"
+}

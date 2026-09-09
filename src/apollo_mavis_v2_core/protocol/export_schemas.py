@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from apollo_mavis_v2_core.errors import SchemaExportError
 from apollo_mavis_v2_core.protocol import (
     control,
+    external,
     keymap,
     maintenance,
     microphone,
@@ -40,8 +41,12 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "AckMsg": control.AckMsg,
     "JointTargetArgs": control.JointTargetArgs,
     "SaveProfileArgs": control.SaveProfileArgs,
+    "SwitchArmArgs": control.SwitchArmArgs,
     "SetInitialConditionArgs": control.SetInitialConditionArgs,
     "TrackerSettingsArgs": control.TrackerSettingsArgs,
+    # goto_profile (2026-09-08): the profile row's "go to" button; motion via the gated
+    # execute_plan path, never implicit
+    "GotoProfileArgs": control.GotoProfileArgs,
     # telemetry (§11; embeds sub-models incl. TrackerTelemetry,
     # MicrophoneTelemetry and HardwareMonitorTelemetry / ArmMonitorTelemetry /
     # MaintenanceProgress / TwinOverlayTelemetry via $defs)
@@ -59,6 +64,21 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     "SceneInfo": session.SceneInfo,
     "ProfileInfo": session.ProfileInfo,
     "PolicyInfo": session.PolicyInfo,
+    # return-to-initial (§12; REST POST /api/session/return_home — 2026-09-08)
+    "ReturnHomeResult": session.ReturnHomeResult,
+    # datasets (§12; REST /api/datasets — 2026-09-07 data collection)
+    "DatasetInfo": session.DatasetInfo,
+    "EpisodeInfo": session.EpisodeInfo,
+    "DatasetExportInfo": session.DatasetExportInfo,
+    "DatasetExportRequest": session.DatasetExportRequest,
+    # dataset layout (§12; REST GET /api/datasets/layout — phase-14, 15-online-dagger §7)
+    "DatasetLayoutInfo": session.DatasetLayoutInfo,
+    "DatasetNamespaceInfo": session.DatasetNamespaceInfo,
+    # Online DAgger (phase-14; 15-online-dagger §5/§7): the SessionSpec block (also rides
+    # SessionSpec / SessionInfo $defs) and GET /api/online_dagger/sessions;
+    # OnlineDaggerStatus rides TelemetryMsg's $defs
+    "OnlineDaggerConfig": session.OnlineDaggerConfig,
+    "OnlineDaggerSessionInfo": session.OnlineDaggerSessionInfo,
     # microphone (§12; REST /api/microphones — phase-11)
     "MicrophoneInfo": microphone.MicrophoneInfo,
     # arm maintenance (§12; REST POST /api/hardware/arms/{arm_id}/maintenance —
@@ -66,6 +86,17 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     # RailSweepVerdict and PrePositionPlan via $defs)
     "ArmMaintenanceRequest": maintenance.ArmMaintenanceRequest,
     "ArmMaintenanceResult": maintenance.ArmMaintenanceResult,
+    # external interface over dora (phase-12; 14-dora §4/§5/§13): the `session`
+    # stream contract message, the policy node's spec heartbeat and GET /api/dora;
+    # PolicySpecModel / CameraAnnounce / DoraMachineInfo ride their $defs,
+    # ExternalStatus rides TelemetryMsg
+    "SessionAnnounce": external.SessionAnnounce,
+    "PolicySpecAnnounce": external.PolicySpecAnnounce,
+    "DoraInfo": external.DoraInfo,
+    # Online DAgger trainer contract (phase-14; 15-online-dagger §6): the generic
+    # trainer_status payload and the SessionAnnounce.online_dagger paths block
+    "TrainerStatusAnnounce": external.TrainerStatusAnnounce,
+    "OnlineDaggerAnnounce": external.OnlineDaggerAnnounce,
     # misc (§8, §13, §6)
     "StateProfile": StateProfile,
     "KeymapEntry": keymap.KeymapEntry,

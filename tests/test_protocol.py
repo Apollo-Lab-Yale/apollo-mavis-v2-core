@@ -9,14 +9,17 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from apollo_mavis_v2_core.dagger.types import ControlMode, TrainerStatus
+from apollo_mavis_v2_core.protocol import external as ext
 from apollo_mavis_v2_core.protocol.control import (
     AckMsg,
     ActionMsg,
+    GotoProfileArgs,
     HelloMsg,
     JointTargetArgs,
     KeysMsg,
     SaveProfileArgs,
     SetInitialConditionArgs,
+    SwitchArmArgs,
     TrackerSettingsArgs,
     parse_client_msg,
     validate_action_args,
@@ -43,6 +46,10 @@ from apollo_mavis_v2_core.protocol.microphone import MicrophoneInfo, MicStatus
 from apollo_mavis_v2_core.protocol.session import (
     ArmStatusInfo,
     CameraInfo,
+    DatasetLayoutInfo,
+    DatasetNamespaceInfo,
+    OnlineDaggerConfig,
+    OnlineDaggerSessionInfo,
     PolicyInfo,
     ProfileInfo,
     SceneInfo,
@@ -59,6 +66,7 @@ from apollo_mavis_v2_core.protocol.telemetry import (
     EpisodeStatus,
     InferenceStatus,
     MicrophoneTelemetry,
+    OnlineDaggerStatus,
     PoseMsg,
     SessionTelemetry,
     TelemetryMsg,
@@ -508,6 +516,94 @@ _BRINGUP_ROWS = [
                         detail="Perception Arm frozen at last sample"),
 ]
 
+
+# -- phase-12 external interface fixtures (14-dora) ----------------------------------------------
+_ANNOUNCE_RUNNING = ext.SessionAnnounce(
+    epoch="ep0", session_id="s9", state="running",
+    spec=SessionSpec(mode="inference", kind="sim", arms=["view", "grip"],
+                     frames={"grip": "arm_base:grip"}, sim_scene="mavis_v2",
+                     policy_source="external"),
+    kind="sim", arm_ids=["view", "grip"], has_rail={"view": True, "grip": True},
+    frames={"view": "arm_base:view", "grip": "arm_base:grip"}, action_space="delta_ee",
+    action_names=["grip_dx"], state_names=["grip_joint1.pos"],
+    camera_ids=["view_wrist_cam", "grip_wrist_cam"],
+    cameras={"view_wrist_cam": ext.CameraAnnounce(
+        resolution=(640, 480), fps=30.0, frame_ref="camera:view_wrist_cam", mount="ee:view",
+        intrinsics=[442.0, 442.0, 320.0, 240.0], T_E_C=[0.07, 0.0, 0.05, 0.7071, 0, 0, 0.7071],
+        depth=True)},
+    policy_source="external",
+)
+_POLICY_SPEC_ANNOUNCE = ext.PolicySpecAnnounce(
+    policy_id="act-pick-2026-09-03", policy_version=2, node_version="0.1.0",
+    spec=ext.PolicySpecModel(action_space="delta_ee", action_frame="arm_base:grip",
+                             action_names=["grip_dx"], state_names=["grip_joint1.pos"],
+                             camera_keys=["grip_wrist_cam"], version=2),
+    rate_hz=15.0, chunk_len=8, chunk_dt_s=1.0 / 25.0, loader="lerobot_pretrained",
+    device="cuda:0", uptime_s=12.5, acts_total=180, last_compute_ms=11.2,
+)
+_EXTERNAL_ATTACHED = ext.ExternalStatus(
+    enabled=True, state="attached", dataflow_id="0199aa", reattach_count=1, dataflow_restarts=2,
+    publish_hz={"arm_state": 50.1, "cam_view_wrist_cam": 15.0}, dropped_inputs=3,
+    actions_late=1, policy_attached=True, policy_id="act-pick", policy_version=2,
+    policy_rate_hz=15.0, action_age_s=0.02, spec_age_s=0.4, version_changes_mid_episode=1,
+    idle_reader="running",
+)
+_DORA_INFO_LAN = ext.DoraInfo(
+    enabled=True, state="attached", bind_host="192.168.0.88", machine_id="lab", auth=True,
+    coordinator_addr="192.168.0.88", coordinator_port=6113, daemon_port=53391, zenoh_port=7447,
+    zenoh_connect="tcp/192.168.0.88:7447", dataflow_id="0199bb",
+    machines=[ext.DoraMachineInfo(id="remote", registered=True, placeholders=["viewer_remote"])],
+    dataflow_restarts=1, dataflow_yaml="/ws/var/dora/mavis_v2.dora.yml",
+)
+
+# -- phase-14 Online DAgger fixtures (15-online-dagger §5-§6) --------------------------------------
+_ONLINE_DAGGER_CFG = OnlineDaggerConfig(
+    session_name="pick-cube-01", resume=True, pause_while_training=False,
+)
+_ONLINE_DAGGER_SPEC = SessionSpec(
+    mode="dagger", kind="sim", arms=["view", "grip"], frames={"grip": "arm_base:grip"},
+    sim_scene="mavis_v2", task="pick the cube", policy_source="external",
+    online_dagger=_ONLINE_DAGGER_CFG,
+)
+_ONLINE_DAGGER_PATHS = ext.OnlineDaggerAnnounce(
+    session_name="pick-cube-01", session_dir="/home/u/data/online_dagger/pick-cube-01",
+    rollouts_dir="/home/u/data/online_dagger/pick-cube-01/rollouts",
+)
+_ANNOUNCE_ONLINE_DAGGER = _ANNOUNCE_RUNNING.model_copy(update={
+    "spec": _ONLINE_DAGGER_SPEC, "dataset_root": _ONLINE_DAGGER_PATHS.rollouts_dir,
+    "online_dagger": _ONLINE_DAGGER_PATHS,
+})
+_TRAINER_TRAINING = ext.TrainerStatusAnnounce(
+    trainer_id="my-policy/online_dagger", node_version="0.2.0", state="training",
+    session_id="s9", policy_version=3, progress=0.375,
+    metrics={"loss": 0.0213, "proj_rate": 0.41, "epoch": 3.0, "n_epochs": 8.0},
+    detail="epoch 3/8", uptime_s=812.0,
+)
+_ONLINE_DAGGER_STATUS = OnlineDaggerStatus(
+    session_name="pick-cube-01", phase="training", rollouts_saved=4,
+    detail="training in progress (epoch 3/8)", trainer_alive=True, trainer_age_s=0.4,
+    trainer=_TRAINER_TRAINING, policy_version_acting=2,
+    expert_frames_session=380, novice_frames_session=1900,
+    session_dir="/home/u/data/online_dagger/pick-cube-01",
+)
+_DAGGER_ONLINE = DaggerStatus(
+    control_mode=ControlMode.POLICY, engaged_arm=None, policy_version="ext/v000002",
+    online_dagger=_ONLINE_DAGGER_STATUS,
+)
+_DATASET_LAYOUT = DatasetLayoutInfo(
+    default_namespace="bc_demo", generic_root="/ws/var/datasets",
+    namespaces={
+        "bc_demo": DatasetNamespaceInfo(root="/home/u/data/bc_demo"),
+        "online_dagger": DatasetNamespaceInfo(root="/home/u/data/online_dagger",
+                                              subdir="rollouts"),
+    },
+)
+_ONLINE_DAGGER_SESSION_ROW = OnlineDaggerSessionInfo(
+    session_name="pick-cube-01", path="/home/u/data/online_dagger/pick-cube-01",
+    created_at="2026-09-08T10:00:00+00:00", task="pick the cube", rollouts=4,
+    last_used_at="2026-09-08T11:00:00+00:00",
+)
+
 _WIRE_MODELS: list[BaseModel] = [
     HelloMsg(epoch="ep0", session_id="s0", role="controller"),
     HelloMsg(epoch="ep0", session_id=None, role="observer"),
@@ -517,13 +613,20 @@ _WIRE_MODELS: list[BaseModel] = [
     ActionMsg(name="joint_target", args={"arm_id": "arm0", "positions": [0.0] * 8, "mode": "jog"}),
     ActionMsg(name="tracker_settings", args={"pos_scale": 1.5, "follow_rotation": False}),
     ActionMsg(name="tracker_settings", args={"filter_min_cutoff_hz": 0.5, "filter_beta": 0.0}),
+    ActionMsg(name="takeover"),
+    ActionMsg(name="handback"),
+    ActionMsg(name="train_now"),
+    ActionMsg(name="goto_profile", args={"profile_id": "3f2a9c1e4b7d4e0f9a1b2c3d4e5f6a7b"}),
     AckMsg(name="takeover_toggle", ok=False, detail="observer"),
+    AckMsg(name="goto_profile", ok=False, detail="planner: no collision-free path"),
+    AckMsg(name="train_now", ok=False, detail="save or discard the episode first"),
     JointTargetArgs(arm_id="arm0", positions=[0.1] * 7, mode="goto"),
     SaveProfileArgs(name="home", notes="pre-demo"),
     SetInitialConditionArgs(profile_id="abc123"),
     SetInitialConditionArgs(),
+    GotoProfileArgs(profile_id="initial-grip_view"),
     TrackerSettingsArgs(yaw_deg=-45.0, pos_scale=0.5, follow_rotation=False),
-    TrackerSettingsArgs(filter_enabled=False, filter_min_cutoff_hz=0.05, filter_beta=5.0),
+    TrackerSettingsArgs(filter_enabled=False, filter_min_cutoff_hz=0.05, filter_beta=200.0),
     TrackerSettingsArgs(),
     _POSE,
     _ARM,
@@ -763,6 +866,64 @@ _WIRE_MODELS: list[BaseModel] = [
         policy_id="run0/v000003", path="checkpoints/run0/v000003/", action_space="delta_ee",
         action_frame="arm_base:arm0", policy_version=3, promoted=False,
     ),
+    # phase-12 external interface over dora (14-dora §4/§5/§6/§13)
+    ext.SessionAnnounce(epoch="ep0", session_id=None, state="idle"),
+    _ANNOUNCE_RUNNING,
+    _POLICY_SPEC_ANNOUNCE,
+    ext.PolicyResetMsg(reason="handback", after_observation_id=412, session_id="s9", t_mono=3.5),
+    ext.EventEnvelope(kind="episode_saved", t_mono=1.0, wallclock_ns=2, session_id="s9",
+                      epoch="ep0", payload={"episode_index": 3, "spool_path": "/x/ep.parquet"}),
+    ext.ExternalStatus(),
+    _EXTERNAL_ATTACHED,
+    ext.DoraMachineInfo(id="gpubox", registered=True,
+                        placeholders=["viewer_gpubox", "observer_gpubox"]),
+    ext.DoraInfo(),
+    _DORA_INFO_LAN,
+    DaggerStatus(control_mode=ControlMode.POLICY, engaged_arm=None, policy_version="ext/v000002",
+                 policy_stale=True),
+    InferenceStatus(control_mode=ControlMode.POLICY, policy_version="ext/v000002",
+                    policy_stale=True),
+    TelemetryMsg(
+        seq=12, ts=21.0, epoch="ep0", active_arm="grip", controller_connected=False,
+        arms=[], collision=CollisionReport.ok(), clearances=[],
+        episode=None, dagger=None, inference=None, session=None,
+        external=_EXTERNAL_ATTACHED,
+    ),
+    SessionSpec(mode="inference", kind="sim", arms=["grip"], frames={}, sim_scene="mavis_v2",
+                policy_source="external"),
+    SessionInfo(session_id="s9", epoch="ep0", mode="dagger", arms=["grip"], streams=[],
+                state="running", policy_source="external"),
+    # phase-14 Online DAgger (15-online-dagger §5-§6)
+    OnlineDaggerConfig(session_name="s1"),
+    _ONLINE_DAGGER_CFG,
+    _ONLINE_DAGGER_SPEC,
+    _ONLINE_DAGGER_PATHS,
+    _ANNOUNCE_ONLINE_DAGGER,
+    ext.TrainerStatusAnnounce(trainer_id="t", node_version="0"),
+    _TRAINER_TRAINING,
+    ext.PolicyResetMsg(reason="episode_boundary", after_observation_id=500, session_id="s9"),
+    ext.EventEnvelope(kind="train_now", t_mono=9.0, wallclock_ns=3, session_id="s9",
+                      payload={"rollouts_saved": 4, "requested_by": "operator"}),
+    ext.EventEnvelope(kind="gate", t_mono=9.5, wallclock_ns=4, session_id="s9",
+                      payload={"arm_id": "grip", "mode": "human", "seq": 3, "source": "action",
+                               "episode_id": "20260908T101500.000Z-aa00"}),
+    ext.EventEnvelope(kind="episode_discarded", t_mono=9.7, wallclock_ns=5, session_id="s9",
+                      payload={"episode_index": 4, "episode_id": "20260908T101900.000Z-bb11",
+                               "reason": "operator"}),
+    OnlineDaggerStatus(session_name="s1", phase="waiting_trainer", rollouts_saved=0),
+    _ONLINE_DAGGER_STATUS,
+    _DAGGER_ONLINE,
+    TelemetryMsg(
+        seq=13, ts=22.0, epoch="ep0", active_arm="grip", controller_connected=True,
+        arms=[], collision=CollisionReport.ok(), clearances=[],
+        episode=EpisodeStatus(state="idle", index=None, frames=0, duration_s=0.0),
+        dagger=_DAGGER_ONLINE, inference=None, external=_EXTERNAL_ATTACHED,
+    ),
+    SessionInfo(session_id="s9", epoch="ep0", mode="dagger", arms=["grip"], streams=[],
+                state="running", policy_source="external", online_dagger=_ONLINE_DAGGER_CFG),
+    _DATASET_LAYOUT,
+    DatasetNamespaceInfo(root="/x"),
+    _ONLINE_DAGGER_SESSION_ROW,
 ]
 
 
@@ -850,7 +1011,7 @@ def test_tracker_settings_msg_filter_fields_default_and_round_trip():
         {"yaw_deg": 0.0, "pos_scale": 1.0, "follow_rotation": True}
     )
     assert (legacy.filter_enabled, legacy.filter_min_cutoff_hz, legacy.filter_beta) == (
-        True, 1.0, 0.05,
+        True, 1.0, 5.0,  # beta default 5.0 since 2026-09-07 (Hz per m/s; 13-tracker §4)
     )
     assert set(TrackerSettingsMsg.model_fields) == {
         "yaw_deg", "pos_scale", "follow_rotation",
@@ -979,8 +1140,8 @@ def test_telemetry_microphone_block_is_additive():
         arms=[], collision=CollisionReport.ok(), clearances=[],
         episode=None, dagger=None, inference=None, microphone=_MIC_LIVE,
     )
-    assert list(TelemetryMsg.model_fields)[-4:] == [
-        "session", "tracker", "microphone", "hardware_monitor",
+    assert list(TelemetryMsg.model_fields)[-6:] == [
+        "session", "tracker", "microphone", "external", "hardware_monitor", "datasets",
     ]
     assert TelemetryMsg.model_fields["microphone"].default is None
     legacy = frame.model_dump(mode="json")
@@ -1194,8 +1355,8 @@ def test_telemetry_hardware_monitor_block_is_additive():
         arms=[], collision=CollisionReport.ok(), clearances=[],
         episode=None, dagger=None, inference=None, hardware_monitor=_HW_MONITOR,
     )
-    assert list(TelemetryMsg.model_fields)[-4:] == [
-        "session", "tracker", "microphone", "hardware_monitor",
+    assert list(TelemetryMsg.model_fields)[-6:] == [
+        "session", "tracker", "microphone", "external", "hardware_monitor", "datasets",
     ]
     assert TelemetryMsg.model_fields["hardware_monitor"].default is None
     legacy = frame.model_dump(mode="json")
@@ -1713,8 +1874,27 @@ def test_arm_bringup_telemetry_pinned_and_session_bringup_additive():
         ArmBringupTelemetry(arm_id="grip", status="ok")  # step required
     assert set(SessionTelemetry.model_fields) == {
         "state", "start_from_progress", "plan_status", "trainer_alive", "bringup",
+        "translate_frame",  # additive 2026-09-08 (04-runtime §6)
+        "fault_detail",  # additive 2026-09-08 (04-runtime §13.3): session-level notice
     }
     assert SessionTelemetry(state="running").bringup is None
+    # The manager's session-level notice (a refused start_from, a Go-to-profile outcome):
+    # additive, "" by default, a pre-2026-09-08 frame without it still parses.
+    assert SessionTelemetry(state="running").fault_detail == ""
+    refused = SessionTelemetry(
+        state="running",
+        fault_detail="start_from refused: Manipulation Arm faulted (controller state 4, "
+        "code C24) - use Clear errors & resume, then Go to profile",
+    )
+    assert json.loads(refused.model_dump_json())["fault_detail"].startswith("start_from refused")
+    assert SessionTelemetry.model_validate({"state": "running"}).fault_detail == ""
+    # The keyboard translate frame the session runs in: additive, None without one,
+    # and only the three the runtime config allows.
+    assert SessionTelemetry(state="running").translate_frame is None
+    for frame in ("camera", "world", "base"):
+        assert SessionTelemetry(state="running", translate_frame=frame).translate_frame == frame
+    with pytest.raises(ValidationError):
+        SessionTelemetry(state="running", translate_frame="tcp")
     block = SessionTelemetry(state="bringup", bringup=_BRINGUP_ROWS)
     wire = json.loads(block.model_dump_json())
     assert wire["state"] == "bringup" and len(wire["bringup"]) == 4
@@ -1748,7 +1928,11 @@ def test_session_info_kind_and_speed_scale_additive():
     pre-09c producer (sim only, unscaled) still parses."""
     assert set(SessionInfo.model_fields) == {
         "session_id", "epoch", "mode", "arms", "streams", "state", "kind", "speed_scale",
+        "policy_source",  # phase-12 echo (additive)
+        "fault_detail",  # 2026-09-08 (additive): the session-level notice, "" by default
+        "online_dagger",  # phase-14 echo (additive; 15-online-dagger §5)
     }
+    assert SessionInfo.model_fields["fault_detail"].default == ""
     legacy = {
         "session_id": "s0", "epoch": "ep0", "mode": "teleop", "arms": ["arm0"],
         "streams": ["cam0", "sim"], "state": "RUNNING",
@@ -1830,7 +2014,16 @@ def test_validate_action_args_per_name():
     )
     assert isinstance(jt, JointTargetArgs)
     sp = validate_action_args(ActionMsg(name="save_profile", args={"name": "home"}))
-    assert isinstance(sp, SaveProfileArgs) and sp.notes == ""
+    assert isinstance(sp, SaveProfileArgs) and sp.notes == "" and sp.set_initial is False
+    spi = validate_action_args(
+        ActionMsg(name="save_profile", args={"name": "home", "set_initial": True})
+    )
+    assert isinstance(spi, SaveProfileArgs) and spi.set_initial is True
+    # switch_arm: no args = cycle (keyboard / gamepad), arm_id = explicit (UI click).
+    sa = validate_action_args(ActionMsg(name="switch_arm", args={}))
+    assert isinstance(sa, SwitchArmArgs) and sa.arm_id is None
+    sae = validate_action_args(ActionMsg(name="switch_arm", args={"arm_id": "view"}))
+    assert isinstance(sae, SwitchArmArgs) and sae.arm_id == "view"
     sic = validate_action_args(ActionMsg(name="set_initial_condition", args={}))
     assert isinstance(sic, SetInitialConditionArgs) and sic.profile_id is None
     ts = validate_action_args(ActionMsg(name="tracker_settings", args={"pos_scale": 2.0}))
@@ -1846,10 +2039,13 @@ def test_validate_action_args_per_name():
     assert (tf.yaw_deg, tf.pos_scale, tf.follow_rotation) == (None, None, None)
 
     # Actions without an args model require empty args and return None.
-    for name in ("switch_arm", "switch_arm_prev", "takeover_toggle", "episode_new",
+    for name in ("switch_arm_prev", "takeover_toggle", "episode_new",
                  "episode_save", "episode_discard"):
         assert validate_action_args(ActionMsg(name=name)) is None
-    with pytest.raises(ValueError):
+    # switch_arm HAS an args model, but every field is optional: a bare
+    # ActionMsg still validates (that is the cycling keyboard path).
+    assert validate_action_args(ActionMsg(name="switch_arm")) == SwitchArmArgs()
+    with pytest.raises(ValueError):  # extra="forbid": junk args stay refused
         validate_action_args(ActionMsg(name="switch_arm", args={"index": 1}))
     with pytest.raises(ValueError):
         validate_action_args(ActionMsg(name="switch_arm_prev", args={"index": 1}))
@@ -1873,7 +2069,7 @@ def test_validate_action_args_per_name():
         {"pos_scale": 1, "follow_rotation": True},  # int coerces to float
         {"filter_enabled": False},  # bypass the pose filter
         {"filter_min_cutoff_hz": 0.05, "filter_beta": 0.0},  # filter lower bounds
-        {"filter_min_cutoff_hz": 50.0, "filter_beta": 5.0},  # filter upper bounds
+        {"filter_min_cutoff_hz": 50.0, "filter_beta": 200.0},  # filter upper bounds
         {"filter_min_cutoff_hz": 1, "filter_beta": 1},  # int coerces to float
         {"yaw_deg": 45.0, "filter_enabled": True, "filter_min_cutoff_hz": 1.0,
          "filter_beta": 0.05},  # mixed alignment + filter
@@ -1902,7 +2098,8 @@ def test_tracker_settings_args_accept(args):
         {"filter_min_cutoff_hz": "slow"},
         {"filter_beta": -1},  # < 0
         {"filter_beta": -0.001},
-        {"filter_beta": 5.5},  # > 5
+        {"filter_beta": 200.5},  # > 200 (ceiling raised from 5 on 2026-09-07: beta is
+        #                            Hz per (m/s), so the useful range starts around 1)
         {"filter_enabled": "maybe"},
     ],
 )
@@ -1961,6 +2158,136 @@ def test_session_spec_collect_dagger_require_task():
     assert _spec(mode="inference").task is None
 
 
+def test_session_spec_dataset_fields():
+    """2026-09-07 (04-runtime §10.5): ``dataset`` names the repo the collect
+    session records into (``DATASET_RE``: slug or namespace/slug), ``dataset_resume``
+    picks the new-vs-existing contract; both are collect-only and default off."""
+    assert _spec(mode="collect", task="t").dataset is None
+    assert _spec(mode="collect", task="t").dataset_resume is False
+    for ok in ("pick_red_cube", "apollo/pick-red-cube_v2", "a", "X1/y2"):
+        assert _spec(mode="collect", task="t", dataset=ok).dataset == ok
+    for bad in ("", "/x", "x/", "a/b/c", "pick red cube", "../x", ".hidden", "x.y"):
+        with pytest.raises(ValidationError):
+            _spec(mode="collect", task="t", dataset=bad)
+    assert _spec(mode="collect", task="t", dataset="d", dataset_resume=True).dataset_resume
+    with pytest.raises(ValidationError):  # collect-mode field
+        _spec(mode="teleop", dataset="d")
+
+
+def test_episode_status_additive_fields():
+    """Recorder telemetry (04-runtime §10.5/§10.6): ``returning`` is a state, the
+    dataset mirror defaults so pre-2026-09-07 producers validate; deletion is
+    immediate (10-frames §11.7), so there is no pending-deletion field."""
+    from apollo_mavis_v2_core.protocol import EpisodeStatus
+
+    old = EpisodeStatus(state="idle", index=None, frames=0, duration_s=0.0)
+    assert old.repo_id is None and old.total_episodes == 0 and old.detail == ""
+    st = EpisodeStatus(
+        state="returning", index=3, frames=0, duration_s=0.0, repo_id="apollo/x",
+        total_episodes=4, total_frames=1000, detail="returning to profile 'ready'",
+    )
+    assert st.state == "returning" and st.total_frames == 1000
+    assert "pending_delete" not in EpisodeStatus.model_fields
+    with pytest.raises(ValidationError):
+        EpisodeStatus(state="paused", index=None, frames=0, duration_s=0.0)
+
+
+def test_session_spec_return_to_start_default_on_collect_and_dagger():
+    """D6 (2026-09-07, 04-runtime §10.5): return-to-start is ON by default for a
+    collect session and can be unticked per session; 15-online-dagger D6 (2026-09-08)
+    extends the field to dagger (Online DAgger rollouts park between rollouts). Setting
+    it explicitly on teleop / inference is still a validation error (the default
+    itself is inert there) — inference keeps the "no blind return" rule of
+    00-overview §4."""
+    assert SessionSpec.model_fields["return_to_start"].default is True
+    for mode in ("collect", "dagger"):
+        assert _spec(mode=mode, task="t").return_to_start is True
+        assert _spec(mode=mode, task="t", return_to_start=False).return_to_start is False
+    assert _spec(mode="teleop").return_to_start is True  # default, never read
+    # The default survives a JSON round trip on every mode (wire invariant), so the
+    # mode rule is on the NON-default value, as for ``dataset`` (None default).
+    for mode in ("teleop", "inference"):
+        assert _spec(mode=mode, return_to_start=True).return_to_start is True
+        with pytest.raises(ValidationError, match="collect / dagger-mode field"):
+            _spec(mode=mode, return_to_start=False)
+    # ``dataset`` itself stays collect-only (a dagger recorder derives its repo id).
+    with pytest.raises(ValidationError, match="collect-mode field"):
+        _spec(mode="dagger", task="t", dataset="d")
+    # the dataset pattern rides the schema so the UI slugs against the same regex
+    field = SessionSpec.model_fields["dataset"]
+    assert field.metadata and any(getattr(m, "pattern", None) for m in field.metadata)
+
+
+def test_action_filter_config_defaults_and_mode_rule():
+    """2026-09-07 addendum (04-runtime §10.5): pro-dagger's defaults, collect / dagger
+    only (a non-default config on another mode is a validation error; the default
+    survives a JSON round trip on every mode)."""
+    from apollo_mavis_v2_core.protocol import ActionFilterConfig
+
+    cfg = ActionFilterConfig()
+    assert (cfg.enabled, cfg.pos_eps_m, cfg.rot_eps_rad) == (True, 0.001, 0.001)
+    assert (cfg.gripper_eps_frac, cfg.rail_eps_m, cfg.gripper_context_s) == (0.01, 0.001, 1.6)
+    assert _spec(mode="collect", task="t").action_filter == cfg
+    off = _spec(mode="collect", task="t", action_filter={"enabled": False}).action_filter
+    assert off.enabled is False and off.pos_eps_m == 0.001
+    dag = _spec(mode="dagger", task="t", action_filter={"pos_eps_m": 0.002})
+    assert dag.action_filter.pos_eps_m == 0.002
+    assert _spec(mode="teleop", action_filter=cfg.model_dump()).action_filter == cfg  # default
+    for mode in ("teleop", "inference"):
+        with pytest.raises(ValidationError):
+            _spec(mode=mode, action_filter={"enabled": False})
+    for bad in ({"pos_eps_m": -1}, {"gripper_context_s": -0.1}, {"rot_eps_rad": "x"}):
+        with pytest.raises(ValidationError):
+            _spec(mode="collect", task="t", action_filter=bad)
+    # EpisodeStatus.frames_skipped is additive
+    from apollo_mavis_v2_core.protocol import EpisodeStatus
+
+    assert EpisodeStatus(state="idle", index=None, frames=0, duration_s=0.0).frames_skipped == 0
+    assert EpisodeStatus(state="recording", index=0, frames=3, duration_s=0.1,
+                         frames_skipped=7).frames_skipped == 7
+    # ProfileInfo.workcell_kind is additive (None = an older runtime)
+    from apollo_mavis_v2_core.protocol import ProfileInfo
+
+    base = dict(profile_id="p", name="n", arms=["grip"], notes="", created_at="t",
+                is_initial_condition=True)
+    assert ProfileInfo(**base).workcell_kind is None
+    assert ProfileInfo(**base, workcell_kind="sim").workcell_kind == "sim"
+    with pytest.raises(ValidationError):
+        ProfileInfo(**base, workcell_kind="other")
+
+
+def test_dataset_rest_models():
+    """01-core §12 (2026-09-07): the /api/datasets rows and the export request."""
+    from apollo_mavis_v2_core.protocol import (
+        DatasetExportInfo,
+        DatasetExportRequest,
+        DatasetInfo,
+        EpisodeInfo,
+    )
+
+    ds = DatasetInfo(
+        repo_id="apollo/pick_cube", root="/x", total_episodes=2, total_frames=100, fps=25,
+        modified_at="2026-09-07T00:00:00+00:00",
+    )
+    assert ds.layout == "episode_dirs" and ds.export is None and ds.in_use is False
+    legacy = DatasetInfo(
+        repo_id="apollo/old", root="/y", layout="lerobot_v3", total_episodes=1,
+        total_frames=10, fps=25, modified_at="2026-09-07T00:00:00+00:00",
+        export=DatasetExportInfo(state="fresh", path="exports/lerobot_v3", episodes=1),
+    )
+    assert legacy.layout == "lerobot_v3" and legacy.export.state == "fresh"
+    with pytest.raises(ValidationError):
+        DatasetExportInfo(state="pending")
+    ep = EpisodeInfo(episode_id="20260907T141203.512Z-3f9a1c", index=0, frames=10,
+                     duration_s=0.4)
+    assert ep.export_ok is True and ep.open is False and ep.audio is False
+    assert "pending_delete" not in EpisodeInfo.model_fields
+    assert DatasetExportRequest().format == "lerobot_v3"
+    assert DatasetExportRequest(out="/tmp/x").out == "/tmp/x"
+    with pytest.raises(ValidationError):
+        DatasetExportRequest(format="aloha_hdf5")
+
+
 def test_session_spec_speed_scale_bounds():
     """phase-09c (D2): speed_scale in (0, 1]; default 1.0 (unscaled); 0 and 1.5 are 422."""
     assert SessionSpec.model_fields["speed_scale"].default == 1.0
@@ -1980,3 +2307,595 @@ def test_session_spec_speed_scale_bounds():
     body = json.loads(_spec().model_dump_json())
     body.pop("speed_scale")
     assert SessionSpec.model_validate(body).speed_scale == 1.0
+
+
+# -- phase-12: SessionSpec.policy_source + external spellings (14-dora §6.1/§13) ----------------
+def test_session_spec_policy_source_external_rules():
+    assert SessionSpec.model_fields["policy_source"].default == "checkpoint"
+    assert _spec().policy_source == "checkpoint"
+    for mode in ("dagger", "inference"):
+        spec = _spec(mode=mode, task="t", policy_source="external")
+        assert spec.policy_source == "external" and spec.policy is None
+    for mode in ("teleop", "collect"):  # external needs a policy-driven mode
+        with pytest.raises(ValidationError, match="dagger|inference"):
+            _spec(mode=mode, task="t", policy_source="external")
+    with pytest.raises(ValidationError, match="policy must be null"):  # 422 with a checkpoint
+        _spec(mode="inference", policy="run0/deploy/v001", policy_source="external")
+    with pytest.raises(ValidationError):
+        _spec(mode="inference", policy_source="remote")
+    body = json.loads(_spec(mode="inference").model_dump_json())
+    body.pop("policy_source")  # additive: pre-12 bodies parse as checkpoint
+    assert SessionSpec.model_validate(body).policy_source == "checkpoint"
+    info = SessionInfo(session_id="s", epoch="e", mode="teleop", arms=[], streams=[], state="x")
+    assert info.policy_source == "checkpoint"
+
+
+def test_external_spellings_are_the_14_dora_ones():
+    assert ext.MAVIS_SCHEMA == 1 and ext.EXTERNAL_NODE_ID == "mavis_runtime"
+    assert ext.RUNTIME_INPUTS == (
+        "tick", "probe_heartbeat", "policy_action", "policy_spec", "policy_status",
+        "policy_trainer_status",  # phase-14 (15-online-dagger §6), appended last
+    )
+    assert ext.PLACEHOLDERS == ("policy", "viewer", "observer")
+    assert ext.RUNTIME_FIXED_OUTPUTS == (
+        "heartbeat", "session", "telemetry", "events", "arm_state", "arm_cmd", "obs_state",
+        "policy_reset",
+    )
+    assert ext.camera_output_id("view_wrist_cam") == "cam_view_wrist_cam"
+    assert ext.depth_output_id("view_wrist_cam") == "cam_view_wrist_cam_depth"
+    assert ext.mic_output_id("mic_view") == "mic_mic_view"
+    assert ext.remote_placeholder_id("viewer", "gpubox") == "viewer_gpubox"
+    assert len(ext.ARM_STATE_LAYOUT) == 32 == ext.ARM_STATE_BLOCK
+    assert ext.ARM_STATE_LAYOUT[:8] == ("q1", "q2", "q3", "q4", "q5", "q6", "q7", "rail_pos")
+    assert ext.ARM_STATE_LAYOUT[8:16] == ("dq1", "dq2", "dq3", "dq4", "dq5", "dq6", "dq7", "drail")
+    assert ext.ARM_STATE_LAYOUT[16:23] == tuple(
+        f"ee_base.{k}" for k in ("x", "y", "z", "qw", "qx", "qy", "qz")
+    )
+    assert ext.ARM_STATE_LAYOUT[23:30] == tuple(
+        f"ee_world.{k}" for k in ("x", "y", "z", "qw", "qx", "qy", "qz")
+    )
+    assert ext.ARM_STATE_LAYOUT[30:] == ("gripper_open_frac", "rail_pos_m")
+    assert "weights_reload" in ext.RESERVED_IDS and "cmd_request" in ext.RESERVED_IDS
+    assert not any(name.startswith("View") for name in ext.__all__)  # Appendix A stays out
+    # every JSON payload carries the schema marker by default
+    for model in (ext.SessionAnnounce(epoch="e", session_id=None, state="idle"),
+                  _POLICY_SPEC_ANNOUNCE, ext.ExternalStatus(), ext.DoraInfo()):
+        assert json.loads(model.model_dump_json()).get("mavis_schema", 1) == 1
+    assert "token" not in ext.DoraInfo.model_fields  # 14-dora §9: never served over REST
+
+
+def test_telemetry_external_block_is_additive():
+    assert TelemetryMsg.model_fields["external"].default is None
+    fields = list(TelemetryMsg.model_fields)
+    assert fields.index("external") == fields.index("microphone") + 1
+    assert DaggerStatus.model_fields["policy_stale"].default is False
+    assert InferenceStatus.model_fields["policy_stale"].default is False
+    wire = json.loads(TelemetryMsg(
+        seq=1, ts=1.0, epoch="e", active_arm=None, controller_connected=False, arms=[],
+        collision=CollisionReport.ok(), clearances=[], episode=None, dagger=None,
+        inference=None,
+    ).model_dump_json())
+    assert wire["external"] is None
+
+
+# -- phase-14: Online DAgger (15-online-dagger §5-§6) ---------------------------------------------
+def _online_dagger_spec(**overrides) -> SessionSpec:
+    base = dict(
+        mode="dagger", task="t", policy_source="external",
+        online_dagger={"session_name": "s1"},
+    )
+    base.update(overrides)
+    return _spec(**base)
+
+
+def test_online_dagger_config_defaults_and_slug():
+    """15-online-dagger §5: the shell's block carries NO algorithm settings — the session
+    name (a bare slug, ``SLUG_RE``, the only required field), ``resume`` and the two
+    generic ``episode_new`` gates (both ON). Field order is the contract."""
+    from apollo_mavis_v2_core.protocol import SLUG_RE
+
+    assert SLUG_RE == r"^[A-Za-z0-9][A-Za-z0-9_\-]*$"
+    assert list(OnlineDaggerConfig.model_fields) == [
+        "session_name", "resume", "pause_while_training", "wait_for_trainer_ready",
+    ]
+    cfg = OnlineDaggerConfig(session_name="s1")
+    assert cfg.model_dump() == {
+        "session_name": "s1", "resume": False, "pause_while_training": True,
+        "wait_for_trainer_ready": True,
+    }
+    assert OnlineDaggerConfig.model_validate_json(cfg.model_dump_json()) == cfg
+    for ok in ("s1", "pick-cube_v2", "A", "0"):
+        assert OnlineDaggerConfig(session_name=ok).session_name == ok
+    for bad in ("", "a/b", "pick cube", ".hidden", "x.y", "-x", "_x", "../x", "bc_demo/s"):
+        with pytest.raises(ValidationError):
+            OnlineDaggerConfig(session_name=bad)
+    with pytest.raises(ValidationError):
+        OnlineDaggerConfig()  # session_name required
+    for flag in ("resume", "pause_while_training", "wait_for_trainer_ready"):
+        assert getattr(OnlineDaggerConfig(session_name="s", **{flag: False}), flag) is False
+        assert getattr(OnlineDaggerConfig(session_name="s", **{flag: True}), flag) is True
+        with pytest.raises(ValidationError):
+            OnlineDaggerConfig(session_name="s", **{flag: "maybe"})
+    # the slug pattern rides the schema so the UI validates against the same regex
+    field = OnlineDaggerConfig.model_fields["session_name"]
+    assert any(getattr(m, "pattern", None) == SLUG_RE for m in field.metadata)
+    # no hyper-parameter, dataset or path field lives here (operator decision 2026-09-08:
+    # the trainer configures its own anchor and algorithm; the runtime stores none of it)
+    assert not {"offline_dataset", "lr", "n_epochs", "rollouts_per_iteration", "replay_buffer",
+                "seed", "session_dir"} & set(OnlineDaggerConfig.model_fields)
+
+
+def test_online_dagger_config_is_strict():
+    """An unknown key is a 422, never silently dropped (``extra="forbid"``) — a stale
+    client's algorithm keys are exactly what would otherwise vanish while the operator
+    believes they travelled; the name carries a 64-char cap (it becomes a directory).
+    JSON Schema: ``additionalProperties: false`` + ``maxLength`` — the sheet reads both."""
+    with pytest.raises(ValidationError) as ei:
+        OnlineDaggerConfig(session_name="s", n_epochs=3)
+    assert ei.value.errors()[0]["type"] == "extra_forbidden"
+    for stale_key in ("offline_dataset", "rollouts_per_iteration", "lr", "replay_buffer",
+                      "seed", "pause_while_traning"):
+        with pytest.raises(ValidationError):
+            OnlineDaggerConfig.model_validate_json(json.dumps({"session_name": "s",
+                                                               stale_key: 1}))
+    with pytest.raises(ValidationError):
+        SessionSpec.model_validate({**_online_dagger_spec().model_dump(),
+                                    "online_dagger": {"session_name": "s", "bogus": 1}})
+    # session_name: 64 ok, 65 refused
+    assert OnlineDaggerConfig(session_name="a" * 64).session_name == "a" * 64
+    with pytest.raises(ValidationError) as ei:
+        OnlineDaggerConfig(session_name="a" * 65)
+    assert ei.value.errors()[0]["type"] == "string_too_long"
+    schema = OnlineDaggerConfig.model_json_schema()
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == ["session_name"]
+    assert schema["properties"]["session_name"] == {
+        "type": "string", "pattern": r"^[A-Za-z0-9][A-Za-z0-9_\-]*$", "maxLength": 64,
+        "title": "Session Name",
+    }
+    for key, default in (("resume", False), ("pause_while_training", True),
+                         ("wait_for_trainer_ready", True)):
+        assert schema["properties"][key] == {
+            "type": "boolean", "default": default, "title": key.replace("_", " ").title(),
+        }
+
+
+def test_session_spec_online_dagger_cross_field_rules():
+    """15-online-dagger §5: ``online_dagger`` needs mode dagger + policy_source external
+    and forbids ``dataset`` / ``dataset_resume`` (the rollouts repo id is derived); the
+    block is appended last, defaults to None and is inert on every other session."""
+    assert list(SessionSpec.model_fields)[-1] == "online_dagger"
+    assert SessionSpec.model_fields["online_dagger"].default is None
+    spec = _online_dagger_spec()
+    assert spec.online_dagger is not None and spec.online_dagger.session_name == "s1"
+    assert spec.online_dagger.wait_for_trainer_ready is True
+    assert spec.dataset is None and spec.dataset_resume is False
+    assert spec.return_to_start is True  # D6: default ON for Online DAgger rollouts too
+    assert _online_dagger_spec(return_to_start=False).return_to_start is False
+    assert _online_dagger_spec(action_filter={"enabled": False}).action_filter.enabled is False
+    # rule 1: mode dagger (teleop / inference have no task; collect has one — all refused)
+    for mode in ("teleop", "collect", "inference"):
+        with pytest.raises(ValidationError, match="online_dagger requires mode dagger"):
+            _online_dagger_spec(mode=mode)
+    # rule 2: the policy is the external trainer node
+    with pytest.raises(ValidationError,
+                       match="online_dagger requires policy_source 'external'"):
+        _online_dagger_spec(policy_source="checkpoint")
+    # rule 3: the rollouts dataset is derived (online_dagger/<session_name>) — evaluated
+    # BEFORE the generic "dataset is a collect-mode field" rule, so the message is specific
+    with pytest.raises(ValidationError, match="leave dataset unset") as ei:
+        _online_dagger_spec(dataset="online_dagger/s1")
+    assert "collect-mode field" not in str(ei.value)
+    with pytest.raises(ValidationError, match="leave dataset unset"):
+        _online_dagger_spec(dataset_resume=True)
+    # the nested block is validated too (422 on a bad slug)
+    with pytest.raises(ValidationError):
+        _online_dagger_spec(online_dagger={"session_name": "bad name"})
+    # a plain external dagger session still validates with None
+    plain = _spec(mode="dagger", task="t", policy_source="external")
+    assert plain.online_dagger is None
+    body = json.loads(plain.model_dump_json())
+    body.pop("online_dagger")  # additive: a pre-phase-14 body parses as None
+    assert SessionSpec.model_validate(body).online_dagger is None
+    wire = json.loads(spec.model_dump_json())
+    assert wire["online_dagger"] == {
+        "session_name": "s1", "resume": False, "pause_while_training": True,
+        "wait_for_trainer_ready": True,
+    }
+    assert SessionSpec.model_validate(wire) == spec
+    assert SessionSpec.model_validate_json(
+        _ONLINE_DAGGER_SPEC.model_dump_json()) == _ONLINE_DAGGER_SPEC
+
+
+def test_session_info_echoes_online_dagger():
+    """15-online-dagger §5: ``SessionInfo.online_dagger`` echoes the spec block (None
+    otherwise), appended last so pre-phase-14 producers and consumers keep parsing."""
+    assert list(SessionInfo.model_fields)[-1] == "online_dagger"
+    assert SessionInfo.model_fields["online_dagger"].default is None
+    base = dict(session_id="s9", epoch="e", mode="dagger", arms=["grip"], streams=["sim"],
+                state="running", policy_source="external")
+    assert SessionInfo(**base).online_dagger is None
+    info = SessionInfo(**base, online_dagger=_ONLINE_DAGGER_CFG)
+    wire = json.loads(info.model_dump_json())
+    assert wire["online_dagger"]["resume"] is True
+    assert wire["online_dagger"]["pause_while_training"] is False
+    assert wire["online_dagger"]["wait_for_trainer_ready"] is True
+    assert SessionInfo.model_validate(wire) == info
+    legacy = dict(wire)
+    legacy.pop("online_dagger")
+    assert SessionInfo.model_validate(legacy).online_dagger is None
+    with pytest.raises(ValidationError):
+        SessionInfo(**base, online_dagger={"session_name": "bad name"})
+
+
+def test_action_name_gains_takeover_handback_train_now_without_keys():
+    """15-online-dagger D3 / §3: the shell's three Cockpit buttons are ActionNames appended
+    last (in this order), argless, and deliberately NOT keymap rows (the keymap is
+    operator-owned; Space keeps ``takeover_toggle``)."""
+    from apollo_mavis_v2_core.protocol import KEYMAP, ActionName
+
+    names = get_args(ActionName)
+    # goto_profile (2026-09-08) is appended after the three; see the test below.
+    assert names[-4:] == ("takeover", "handback", "train_now", "goto_profile")
+    assert "takeover_toggle" in names
+    assert not any(n.startswith("pro_") for n in names)  # the v1.0 spelling is gone
+    for name in ("takeover", "handback", "train_now"):
+        msg = parse_client_msg(json.dumps({"t": "action", "name": name}))
+        assert isinstance(msg, ActionMsg) and msg.name == name and msg.args == {}
+        assert validate_action_args(msg) is None  # takes no args
+        with pytest.raises(ValueError, match="takes no args"):
+            validate_action_args(ActionMsg(name=name, args={"arm_id": "grip"}))
+        assert not any(row.action == name for row in KEYMAP)
+    for ack in (AckMsg(name="train_now", ok=False, detail="save or discard the episode first"),
+                AckMsg(name="takeover", ok=True),  # idempotent no-op acks are plain oks
+                AckMsg(name="handback", ok=False, detail="observer")):
+        assert AckMsg.model_validate_json(ack.model_dump_json()) == ack
+    assert [row.action for row in KEYMAP if row.code == "Space"] == ["takeover_toggle"]
+    assert len(KEYMAP) == 24  # the operator's table is untouched
+
+
+def test_external_spellings_gain_the_online_dagger_ones():
+    """15-online-dagger §6: every list is append-only (the two contract goldens pin the
+    order); ``episode_boundary`` is a legal reset reason; ``train_now`` rides the same
+    envelope as the phase-12 kinds; ``PolicySpecAnnounce.capabilities`` and
+    ``SessionAnnounce.online_dagger`` are appended last and default so a phase-12 node
+    keeps parsing."""
+    assert ext.POLICY_OUT_TRAINER_STATUS == "trainer_status"
+    assert ext.POLICY_OUTPUTS == ("action", "spec", "status", "trainer_status")
+    assert ext.IN_POLICY_TRAINER_STATUS == "policy_trainer_status"
+    assert ext.RUNTIME_INPUTS[-1] == ext.IN_POLICY_TRAINER_STATUS
+    assert ext.EVENT_KINDS == (
+        "collision", "gate", "episode_saved", "episode_discarded", "policy_anomaly",
+        "policy_swap", "policy_version_changed", "reset_watermark", "session_error",
+        "train_now",
+    )
+    assert ext.EVENT_KINDS == tuple(get_args(ext.EventKind))
+    assert len(ext.EVENT_KINDS) == 10  # the phase-12 nine + train_now; no iteration kinds
+    assert get_args(ext.PolicyResetReason) == (
+        "handback", "episode_boundary", "session_start", "anomaly", "session_stop",
+    )
+    reset = ext.PolicyResetMsg(reason="episode_boundary", after_observation_id=1, session_id="s")
+    assert json.loads(reset.model_dump_json())["reason"] == "episode_boundary"
+    spool = "/r/trainer_spool/ep_e3.parquet"
+    for kind, payload in (
+        ("gate", {"arm_id": "grip", "mode": "human", "seq": 3, "source": "action",
+                  "episode_id": "20260908T101500.000Z-aa00"}),
+        ("episode_saved", {"episode_index": 3, "spool_path": spool, "dataset_root": "/r",
+                           "run_id": "ext",
+                           "online_dagger": {"episode_id": "e3", "rollouts_saved": 4,
+                                             "actor_counts": {"novice": 200, "expert": 40},
+                                             "policy_version": 2, "spool_path": spool}}),
+        ("episode_discarded", {"episode_index": 3, "episode_id": "e3", "reason": "operator"}),
+        ("train_now", {"rollouts_saved": 4, "requested_by": "operator"}),
+    ):
+        env = ext.EventEnvelope(kind=kind, t_mono=1.0, wallclock_ns=2, session_id="s",
+                                payload=payload)
+        assert ext.EventEnvelope.model_validate_json(env.model_dump_json()) == env
+        assert env.kind in ext.EVENT_KINDS
+    # PolicySpecAnnounce.capabilities
+    assert list(ext.PolicySpecAnnounce.model_fields)[-1] == "capabilities"
+    assert _POLICY_SPEC_ANNOUNCE.capabilities == []
+    body = json.loads(_POLICY_SPEC_ANNOUNCE.model_dump_json())
+    assert body["capabilities"] == []
+    body.pop("capabilities")  # a phase-12 node's heartbeat
+    assert ext.PolicySpecAnnounce.model_validate(body).capabilities == []
+    trainer_node = _POLICY_SPEC_ANNOUNCE.model_copy(update={"capabilities": ["online_dagger"]})
+    assert json.loads(trainer_node.model_dump_json())["capabilities"] == ["online_dagger"]
+    round_trip = ext.PolicySpecAnnounce.model_validate_json(trainer_node.model_dump_json())
+    assert round_trip == trainer_node
+    # SessionAnnounce.online_dagger + OnlineDaggerAnnounce field order
+    assert list(ext.SessionAnnounce.model_fields)[-1] == "online_dagger"
+    assert ext.SessionAnnounce.model_fields["online_dagger"].default is None
+    assert _ANNOUNCE_RUNNING.online_dagger is None
+    assert list(ext.OnlineDaggerAnnounce.model_fields) == [
+        "session_name", "session_dir", "rollouts_dir",
+    ]
+    with pytest.raises(ValidationError):
+        ext.OnlineDaggerAnnounce(session_name="s")  # every path is required
+    wire = json.loads(_ANNOUNCE_ONLINE_DAGGER.model_dump_json())
+    assert wire["online_dagger"] == {
+        "session_name": "pick-cube-01",
+        "session_dir": "/home/u/data/online_dagger/pick-cube-01",
+        "rollouts_dir": "/home/u/data/online_dagger/pick-cube-01/rollouts",
+    }
+    assert wire["spec"]["online_dagger"]["session_name"] == wire["online_dagger"]["session_name"]
+    assert wire["dataset_root"] == wire["online_dagger"]["rollouts_dir"]
+    assert wire["mavis_schema"] == 1
+    assert ext.SessionAnnounce.model_validate(wire) == _ANNOUNCE_ONLINE_DAGGER
+    legacy = dict(wire)
+    legacy.pop("online_dagger")
+    assert ext.SessionAnnounce.model_validate(legacy).online_dagger is None
+
+
+def test_trainer_status_announce_defaults_and_order():
+    """15-online-dagger §6: the generic ``policy_trainer_status`` payload, spelled exactly
+    (both goldens pin the order); only ``trainer_id`` / ``node_version`` are required so a
+    node can heartbeat ``idle``; ``metrics`` is free-form (the trainer picks the keys),
+    every value a finite float."""
+    assert list(ext.TrainerStatusAnnounce.model_fields) == [
+        "mavis_schema", "trainer_id", "node_version", "state", "session_id",
+        "policy_version", "progress", "metrics", "detail", "uptime_s",
+    ]
+    st = ext.TrainerStatusAnnounce(trainer_id="my-policy/online_dagger", node_version="0.2.0")
+    assert st.model_dump() == {
+        "mavis_schema": 1, "trainer_id": "my-policy/online_dagger", "node_version": "0.2.0",
+        "state": "idle", "session_id": None, "policy_version": 0, "progress": 0.0,
+        "metrics": {}, "detail": "", "uptime_s": 0.0,
+    }
+    for state in ("idle", "preparing", "training", "ready", "error"):
+        assert ext.TrainerStatusAnnounce(trainer_id="t", node_version="0",
+                                         state=state).state == state
+    for bad in ("running", "done", "READY", "swapping", ""):
+        with pytest.raises(ValidationError):
+            ext.TrainerStatusAnnounce(trainer_id="t", node_version="0", state=bad)
+    with pytest.raises(ValidationError):
+        ext.TrainerStatusAnnounce(node_version="0")  # trainer_id required
+    with pytest.raises(ValidationError):
+        ext.TrainerStatusAnnounce(trainer_id="t")  # node_version required
+    # pydantic copies mutable defaults: two heartbeats never share a metrics dict
+    a = ext.TrainerStatusAnnounce(trainer_id="t", node_version="0")
+    b = ext.TrainerStatusAnnounce(trainer_id="t", node_version="0")
+    assert a.metrics is not b.metrics
+    # metrics values are floats (ints coerce); strings / None are refused
+    st = ext.TrainerStatusAnnounce(trainer_id="t", node_version="0",
+                                   metrics={"epoch": 3, "loss": 0.02})
+    assert st.metrics == {"epoch": 3.0, "loss": 0.02}
+    for bad_metrics in ({"note": "ok"}, {"loss": None}, {"loss": [0.1]}):
+        with pytest.raises(ValidationError):
+            ext.TrainerStatusAnnounce(trainer_id="t", node_version="0", metrics=bad_metrics)
+    wire = json.loads(_TRAINER_TRAINING.model_dump_json())
+    assert wire["state"] == "training" and wire["progress"] == 0.375
+    assert wire["metrics"] == {"loss": 0.0213, "proj_rate": 0.41, "epoch": 3.0, "n_epochs": 8.0}
+    assert wire["session_id"] == "s9" and wire["policy_version"] == 3
+    assert ext.TrainerStatusAnnounce.model_validate(wire) == _TRAINER_TRAINING
+    # a node that only knows the phase-12 contract cannot send this; a runtime that only
+    # knows phase-12 ignores the input — so the schema marker still rides every message
+    assert wire["mavis_schema"] == 1
+
+
+def test_trainer_status_floats_are_finite_and_bounded():
+    """15-online-dagger §6: ``progress`` (0..1), ``uptime_s`` (>= 0) and every ``metrics``
+    value refuse inf / nan — a diverged loss travels as ``state: "error"`` + ``detail``,
+    never as a non-finite number. The range rules ride the JSON schema; the finiteness
+    rule does not (JSON has no inf / nan to describe)."""
+    base = dict(trainer_id="t", node_version="0")
+    for value in (float("inf"), float("-inf"), float("nan")):
+        for field in ("progress", "uptime_s"):
+            with pytest.raises(ValidationError):
+                ext.TrainerStatusAnnounce(**base, **{field: value})
+        with pytest.raises(ValidationError):
+            ext.TrainerStatusAnnounce(**base, metrics={"loss": value})
+    for bad in (-0.01, 1.01, 2):
+        with pytest.raises(ValidationError):
+            ext.TrainerStatusAnnounce(**base, progress=bad)
+    with pytest.raises(ValidationError):
+        ext.TrainerStatusAnnounce(**base, uptime_s=-1.0)
+    edge = ext.TrainerStatusAnnounce(**base, progress=1, uptime_s=0)
+    assert (edge.progress, edge.uptime_s) == (1.0, 0.0)
+    # the JSON parser's Infinity / NaN literals are refused the same way
+    for doc in ('{"trainer_id": "t", "node_version": "0", "progress": NaN}',
+                '{"trainer_id": "t", "node_version": "0", "metrics": {"x": Infinity}}',
+                '{"trainer_id": "t", "node_version": "0", "uptime_s": -Infinity}'):
+        with pytest.raises(ValidationError):
+            ext.TrainerStatusAnnounce.model_validate_json(doc)
+    # finite values pass, whatever the key
+    st = ext.TrainerStatusAnnounce(**base, progress=0.5, uptime_s=2.0,
+                                   metrics={"loss": 0.02, "grad_norm": 1e3, "lr": 1e-6})
+    assert st.metrics["grad_norm"] == 1e3
+    schema = ext.TrainerStatusAnnounce.model_json_schema()
+    assert schema["properties"]["progress"] == {
+        "type": "number", "default": 0.0, "minimum": 0, "maximum": 1, "title": "Progress",
+    }
+    assert schema["properties"]["uptime_s"] == {
+        "type": "number", "default": 0.0, "minimum": 0, "title": "Uptime S",
+    }
+    assert schema["properties"]["metrics"] == {
+        "type": "object", "additionalProperties": {"type": "number"}, "default": {},
+        "title": "Metrics",
+    }
+    assert "$defs" not in schema  # a flat payload: no nested block
+
+
+def test_external_status_trainer_fields_are_last_and_round_trip():
+    """15-online-dagger §6/§8: ``ExternalStatus`` grew ``capabilities`` ([]) and
+    ``trainer_status`` (None) — appended LAST (additive; the launcher gates "Start
+    Online DAgger" on them before a session exists) and carried through
+    ``telemetry.external`` unchanged."""
+    assert list(ext.ExternalStatus.model_fields)[-2:] == ["capabilities", "trainer_status"]
+    assert ext.ExternalStatus.model_fields["capabilities"].default == []
+    assert ext.ExternalStatus.model_fields["trainer_status"].default is None
+    dumped = ext.ExternalStatus().model_dump()
+    assert dumped["capabilities"] == [] and dumped["trainer_status"] is None
+    # two instances never share the default list
+    a, b = ext.ExternalStatus(), ext.ExternalStatus()
+    assert a.capabilities is not b.capabilities
+    status = _EXTERNAL_ATTACHED.model_copy(
+        update={"capabilities": ["online_dagger"], "trainer_status": _TRAINER_TRAINING})
+    msg = TelemetryMsg(
+        seq=1, ts=1.0, epoch="e", active_arm=None, controller_connected=False, arms=[],
+        collision=CollisionReport.ok(), clearances=[], episode=None, dagger=None,
+        inference=None, external=status,
+    )
+    wire = json.loads(msg.model_dump_json())
+    assert list(wire["external"])[-2:] == ["capabilities", "trainer_status"]
+    assert wire["external"]["capabilities"] == ["online_dagger"]
+    assert wire["external"]["trainer_status"]["state"] == "training"
+    assert wire["external"]["trainer_status"]["metrics"]["loss"] == 0.0213
+    back = TelemetryMsg.model_validate(wire)
+    assert back.external == status and back.external.trainer_status == _TRAINER_TRAINING
+    # a phase-12 producer (no such keys) still validates: the defaults fill in
+    legacy = dict(wire["external"])
+    del legacy["capabilities"], legacy["trainer_status"]
+    ext_legacy = TelemetryMsg.model_validate({**wire, "external": legacy}).external
+    assert ext_legacy is not None
+    assert ext_legacy.capabilities == [] and ext_legacy.trainer_status is None
+
+
+def test_dagger_status_online_dagger_block_is_additive():
+    """15-online-dagger §5: ``DaggerStatus.online_dagger`` (appended last, None outside
+    Online DAgger) carries the shell's rollout-level state; ``OnlineDaggerStatus`` embeds
+    the trainer's last status verbatim and counts kept rollouts and the session's actor
+    split — no iteration counter, no history rows (the trainer's business)."""
+    assert list(DaggerStatus.model_fields)[-1] == "online_dagger"
+    assert DaggerStatus.model_fields["online_dagger"].default is None
+    legacy = DaggerStatus(control_mode=ControlMode.POLICY, engaged_arm=None, policy_version=None)
+    assert legacy.online_dagger is None
+    assert list(OnlineDaggerStatus.model_fields) == [
+        "session_name", "phase", "rollouts_saved", "detail", "trainer_alive", "trainer_age_s",
+        "trainer", "policy_version_acting", "expert_frames_session", "novice_frames_session",
+        "session_dir",
+    ]
+    assert not {"iteration", "rollout_index", "rollouts_per_iteration", "history"} & set(
+        OnlineDaggerStatus.model_fields)
+    st = OnlineDaggerStatus(session_name="s1", phase="waiting_trainer", rollouts_saved=0)
+    assert (st.detail, st.trainer_alive, st.trainer_age_s, st.trainer) == ("", False, None, None)
+    assert st.policy_version_acting is None and st.session_dir == ""
+    assert (st.expert_frames_session, st.novice_frames_session) == (0, 0)
+    for phase in ("waiting_trainer", "rollout", "training", "error"):
+        assert OnlineDaggerStatus(session_name="s", phase=phase, rollouts_saved=1).phase == phase
+    for bad in ("preparing", "swapping", "idle", "ROLLOUT", ""):
+        with pytest.raises(ValidationError):
+            OnlineDaggerStatus(session_name="s", phase=bad, rollouts_saved=0)
+    with pytest.raises(ValidationError):
+        OnlineDaggerStatus(session_name="s", phase="rollout")  # rollouts_saved is required
+    wire = json.loads(_DAGGER_ONLINE.model_dump_json())
+    od = wire["online_dagger"]
+    assert od["phase"] == "training" and od["rollouts_saved"] == 4
+    assert od["trainer"]["state"] == "training" and od["trainer"]["metrics"]["loss"] == 0.0213
+    assert od["policy_version_acting"] == 2 and od["trainer"]["policy_version"] == 3
+    assert (od["expert_frames_session"], od["novice_frames_session"]) == (380, 1900)
+    assert DaggerStatus.model_validate(wire) == _DAGGER_ONLINE
+    # the whole frame round-trips with the block nested three levels deep
+    frame = TelemetryMsg(
+        seq=1, ts=1.0, epoch="e", active_arm="grip", controller_connected=True, arms=[],
+        collision=CollisionReport.ok(), clearances=[], episode=None, dagger=_DAGGER_ONLINE,
+        inference=None,
+    )
+    assert TelemetryMsg.model_validate_json(frame.model_dump_json()) == frame
+    nested = json.loads(frame.model_dump_json())["dagger"]["online_dagger"]
+    assert nested["session_name"] == "pick-cube-01"
+    assert nested["session_dir"] == "/home/u/data/online_dagger/pick-cube-01"
+
+
+def test_dataset_layout_and_online_dagger_session_rest_models():
+    """15-online-dagger §7 (D5): ``GET /api/datasets/layout``, the additive
+    ``DatasetInfo.namespace`` / ``.path`` and the ``GET /api/online_dagger/sessions`` row."""
+    from apollo_mavis_v2_core.protocol import DatasetInfo
+
+    ds = DatasetInfo(repo_id="apollo/pick_cube", root="/x", total_episodes=2, total_frames=100,
+                     fps=25, modified_at="2026-09-07T00:00:00+00:00")
+    assert (ds.namespace, ds.path) == ("", "")  # an older runtime's row still validates
+    assert list(DatasetInfo.model_fields)[-2:] == ["namespace", "path"]
+    rollouts = "/home/u/data/online_dagger/pick-cube-01/rollouts"
+    mapped = DatasetInfo(
+        repo_id="online_dagger/pick-cube-01", root=rollouts, total_episodes=4,
+        total_frames=8000, fps=25, modified_at="2026-09-08T00:00:00+00:00",
+        namespace="online_dagger", path=rollouts,
+    )
+    assert mapped.namespace == "online_dagger" and mapped.path == mapped.root
+    assert DatasetInfo.model_validate_json(mapped.model_dump_json()) == mapped
+    # layout
+    assert list(DatasetLayoutInfo.model_fields) == [
+        "default_namespace", "generic_root", "namespaces",
+    ]
+    assert list(DatasetNamespaceInfo.model_fields) == ["root", "subdir"]
+    assert DatasetNamespaceInfo(root="/x").subdir is None
+    layout = DatasetLayoutInfo.model_validate({
+        "default_namespace": "bc_demo", "generic_root": "/ws/var/datasets",
+        "namespaces": {"bc_demo": {"root": "/home/u/data/bc_demo"},
+                       "online_dagger": {"root": "/home/u/data/online_dagger",
+                                         "subdir": "rollouts"}},
+    })
+    assert layout == _DATASET_LAYOUT
+    assert layout.namespaces["bc_demo"].subdir is None
+    assert layout.namespaces["online_dagger"].subdir == "rollouts"
+    assert DatasetLayoutInfo(default_namespace="apollo", generic_root="/t", namespaces={}) \
+        .namespaces == {}  # the test layout: generic root only
+    with pytest.raises(ValidationError):
+        DatasetLayoutInfo(default_namespace="bc_demo", generic_root="/x")  # namespaces required
+    with pytest.raises(ValidationError):
+        DatasetNamespaceInfo(subdir="rollouts")  # root required
+    # sessions row: name, folder, when, what, how many kept rollouts, last use
+    assert list(OnlineDaggerSessionInfo.model_fields) == [
+        "session_name", "path", "created_at", "task", "rollouts", "last_used_at",
+    ]
+    row = _ONLINE_DAGGER_SESSION_ROW
+    assert row.rollouts == 4 and row.last_used_at == "2026-09-08T11:00:00+00:00"
+    fresh = OnlineDaggerSessionInfo(
+        session_name="s2", path="/p", created_at="2026-09-08T00:00:00+00:00", task=None,
+        rollouts=0,
+    )
+    assert fresh.task is None and fresh.last_used_at is None
+    with pytest.raises(ValidationError):  # task is required (nullable), like SessionSpec.task
+        OnlineDaggerSessionInfo(session_name="s1", path="/p", created_at="c", rollouts=0)
+    with pytest.raises(ValidationError):  # rollouts is required
+        OnlineDaggerSessionInfo(session_name="s1", path="/p", created_at="c", task=None)
+    assert OnlineDaggerSessionInfo.model_validate_json(row.model_dump_json()) == row
+
+
+def test_action_name_gains_goto_profile_with_required_profile_id():
+    """2026-09-08: ``goto_profile`` is the LAST ActionName, takes exactly
+    ``{profile_id}`` (ProfileStore id charset, required, ``extra="forbid"``) and is
+    deliberately NOT a keymap row (the keymap is operator-owned; motion is
+    operator-requested via the UI and runs through the gated execute_plan path)."""
+    from apollo_mavis_v2_core.protocol import KEYMAP, ActionName
+    from apollo_mavis_v2_core.protocol import GotoProfileArgs as ReExported
+
+    assert ReExported is GotoProfileArgs  # exported from the protocol package
+    names = get_args(ActionName)
+    assert names[-1] == "goto_profile"
+    assert names.index("goto_profile") > names.index("train_now")  # appended, not inserted
+    assert not any(row.action == "goto_profile" for row in KEYMAP)
+    assert len(KEYMAP) == 24  # the operator's table is untouched
+
+    # Accepted: exactly {profile_id}, in the store's id charset.
+    for pid in ("3f2a9c1e4b7d4e0f9a1b2c3d4e5f6a7b", "initial-grip_view", "A", "0-_"):
+        msg = parse_client_msg(json.dumps({"t": "action", "name": "goto_profile",
+                                           "args": {"profile_id": pid}}))
+        assert isinstance(msg, ActionMsg) and msg.name == "goto_profile"
+        parsed = validate_action_args(msg)
+        assert isinstance(parsed, GotoProfileArgs) and parsed.profile_id == pid
+        assert GotoProfileArgs.model_validate_json(parsed.model_dump_json()) == parsed
+    assert list(GotoProfileArgs.model_fields) == ["profile_id"]
+
+    # Refused: missing profile_id (no "current state" default, unlike set_initial_condition).
+    with pytest.raises(ValidationError) as ei:
+        validate_action_args(ActionMsg(name="goto_profile"))
+    assert ei.value.errors()[0]["type"] == "missing"
+    with pytest.raises(ValidationError):
+        validate_action_args(ActionMsg(name="goto_profile", args={"profile_id": None}))
+    # Refused: an extra key (client bug), even alongside a valid id.
+    with pytest.raises(ValidationError) as ei:
+        validate_action_args(
+            ActionMsg(name="goto_profile", args={"profile_id": "abc", "arm_id": "grip"})
+        )
+    assert ei.value.errors()[0]["type"] == "extra_forbidden"
+    with pytest.raises(ValidationError):
+        validate_action_args(ActionMsg(name="goto_profile", args={"name": "home"}))
+    # Refused: ids outside the ProfileStore charset (a path separator, spaces, empty).
+    for bad in ("", "../etc", "a b", "profile:abc", "home.json"):
+        with pytest.raises(ValidationError):
+            GotoProfileArgs(profile_id=bad)
+    # The ack round-trips like every other action's.
+    ack = AckMsg(name="goto_profile", ok=False, detail="planner: no collision-free path")
+    assert AckMsg.model_validate_json(ack.model_dump_json()) == ack

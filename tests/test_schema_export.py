@@ -58,12 +58,24 @@ def test_index_and_keymap_contents(tmp_path):
     assert index["models"] == sorted(EXPORTED_MODELS)
     assert isinstance(index["core_version"], str) and index["core_version"]
     keymap = json.loads((out / "keymap.json").read_text())
-    assert isinstance(keymap, list) and len(keymap) == 23
+    assert isinstance(keymap, list) and len(keymap) == 24
     assert {row["code"] for row in keymap} >= {"KeyW", "Space", "ArrowRight", "KeyC", "KeyZ"}
     # 13-tracker §3: every row carries the (nullable) gamepad field.
     assert all("gamepad" in row for row in keymap)
     gamepads = {row["code"]: row["gamepad"] for row in keymap}
     assert gamepads["KeyC"] == "RT" and gamepads["KeyZ"] == "LB" and gamepads["KeyW"] is None
+    # 2026-09-07 (phase-13): the keyboard is a full teleop interface — no
+    # ``keyboard`` flag on the wire, codes unique across the table, episode keys
+    # on N / Enter / Backspace.
+    assert all("keyboard" not in row for row in keymap)
+    codes = [row["code"] for row in keymap]
+    assert len(set(codes)) == len(codes) == 24
+    episode = {row["action"]: row["code"] for row in keymap if row["group"] == "episode"}
+    assert episode == {
+        "episode_new": "KeyN", "episode_save": "Enter", "episode_discard": "Backspace",
+    }
+    entry = json.loads((out / "KeymapEntry.json").read_text())
+    assert "keyboard" not in entry["properties"]
 
 
 def test_telemetry_schema_embeds_tracker_block(tmp_path):
@@ -135,7 +147,7 @@ def test_telemetry_schema_embeds_tracker_block(tmp_path):
         "type": "number", "default": 1.0, "title": "Filter Min Cutoff Hz",
     }
     assert settings["properties"]["filter_beta"] == {
-        "type": "number", "default": 0.05, "title": "Filter Beta",
+        "type": "number", "default": 5.0, "title": "Filter Beta",  # 2026-09-07 retune
     }
     controller = telemetry["$defs"]["ControllerTelemetry"]
     assert set(controller["properties"]) == {
@@ -165,7 +177,7 @@ def test_telemetry_schema_embeds_tracker_block(tmp_path):
     assert {"minimum": 0.05, "maximum": 50.0}.items() <= _number_branch(min_cutoff).items()
     assert {"type": "null"} in min_cutoff["anyOf"] and min_cutoff["default"] is None
     beta = settings_args["properties"]["filter_beta"]
-    assert {"minimum": 0.0, "maximum": 5.0}.items() <= _number_branch(beta).items()
+    assert {"minimum": 0.0, "maximum": 200.0}.items() <= _number_branch(beta).items()
     assert {"type": "null"} in beta["anyOf"] and beta["default"] is None
     enabled = settings_args["properties"]["filter_enabled"]
     assert {"type": "boolean"} in enabled["anyOf"] and {"type": "null"} in enabled["anyOf"]
@@ -247,7 +259,9 @@ def test_exported_models_cover_spec_sections():
         # control
         "HelloMsg", "KeysMsg", "ActionMsg", "AckMsg",
         "JointTargetArgs", "SaveProfileArgs", "SetInitialConditionArgs",
-        "TrackerSettingsArgs",
+        "SwitchArmArgs", "TrackerSettingsArgs",
+        # goto_profile (2026-09-08; profile row "go to" button)
+        "GotoProfileArgs",
         # telemetry
         "TelemetryMsg",
         # tracker calibration (REST; sub-models ride $defs)
@@ -255,10 +269,22 @@ def test_exported_models_cover_spec_sections():
         # session
         "SessionSpec", "SessionInfo", "WorkcellStatus", "ArmStatusInfo",
         "CameraInfo", "SceneInfo", "ProfileInfo", "PolicyInfo",
+        # return-to-initial (REST POST /api/session/return_home; 2026-09-08)
+        "ReturnHomeResult",
+        # datasets (REST /api/datasets; 2026-09-07 data collection)
+        "DatasetInfo", "EpisodeInfo", "DatasetExportInfo", "DatasetExportRequest",
+        # dataset layout (REST GET /api/datasets/layout; phase-14, 15-online-dagger §7)
+        "DatasetLayoutInfo", "DatasetNamespaceInfo",
+        # Online DAgger (phase-14; 15-online-dagger §5-§7): the spec block, the sessions
+        # row, the generic trainer_status payload and the SessionAnnounce paths block
+        "OnlineDaggerConfig", "OnlineDaggerSessionInfo",
+        "TrainerStatusAnnounce", "OnlineDaggerAnnounce",
         # microphone (REST /api/microphones; phase-11)
         "MicrophoneInfo",
         # arm maintenance (REST POST /api/hardware/arms/{arm_id}/maintenance; phase-09b)
         "ArmMaintenanceRequest", "ArmMaintenanceResult",
+        # external interface over dora (phase-12; 14-dora §13)
+        "SessionAnnounce", "PolicySpecAnnounce", "DoraInfo",
         # misc
         "StateProfile", "KeymapEntry", "CollisionEvent",
     }
@@ -726,6 +752,12 @@ def test_session_spec_and_info_speed_scale_schema(tmp_path):
     info = json.loads((out / "SessionInfo.json").read_text())
     assert set(info["properties"]) == {
         "session_id", "epoch", "mode", "arms", "streams", "state", "kind", "speed_scale",
+        "policy_source",  # phase-12 echo (additive)
+        "fault_detail",  # 2026-09-08 (additive): the session-level notice
+        "online_dagger",  # phase-14 echo (additive; 15-online-dagger §5)
+    }
+    assert info["properties"]["fault_detail"] == {
+        "type": "string", "default": "", "title": "Fault Detail",
     }
     assert set(info["required"]) == {"session_id", "epoch", "mode", "arms", "streams", "state"}
     assert info["properties"]["kind"] == {
@@ -733,7 +765,8 @@ def test_session_spec_and_info_speed_scale_schema(tmp_path):
     }
     assert info["properties"]["kind"]["enum"] == spec["properties"]["kind"]["enum"]
     assert info["properties"]["speed_scale"] == spec["properties"]["speed_scale"]
-    assert "$defs" not in info  # flat response
+    # phase-14: the echoed Online DAgger block is the only nested model of the response.
+    assert set(info["$defs"]) == {"OnlineDaggerConfig"}
 
 
 def test_telemetry_schema_session_bringup_rows(tmp_path):
@@ -746,8 +779,16 @@ def test_telemetry_schema_session_bringup_rows(tmp_path):
     session = telemetry["$defs"]["SessionTelemetry"]
     assert set(session["properties"]) == {
         "state", "start_from_progress", "plan_status", "trainer_alive", "bringup",
+        "translate_frame",  # additive 2026-09-08 (04-runtime §6)
+        "fault_detail",  # additive 2026-09-08 (04-runtime §13.3): session-level notice
+    }
+    assert session["properties"]["fault_detail"] == {
+        "type": "string", "default": "", "title": "Fault Detail",
     }
     assert session["required"] == ["state"]
+    frame = session["properties"]["translate_frame"]
+    assert {"type": "string", "enum": ["camera", "world", "base"]} in frame["anyOf"]
+    assert {"type": "null"} in frame["anyOf"] and frame["default"] is None
     bringup = session["properties"]["bringup"]
     assert {"type": "array", "items": {"$ref": "#/$defs/ArmBringupTelemetry"}} in bringup["anyOf"]
     assert {"type": "null"} in bringup["anyOf"] and bringup["default"] is None
@@ -763,3 +804,202 @@ def test_telemetry_schema_session_bringup_rows(tmp_path):
     index = json.loads((out / "index.json").read_text())
     assert "ArmBringupTelemetry" not in index["models"]
     assert not (out / "ArmBringupTelemetry.json").exists()
+
+
+def test_online_dagger_schemas(tmp_path):
+    """phase-14 (15-online-dagger §5-§7): OnlineDaggerConfig rides SessionSpec / SessionInfo
+    $defs AND exports top-level (the sheet validates against it); TrainerStatusAnnounce,
+    OnlineDaggerAnnounce and the REST rows export top-level; OnlineDaggerStatus rides
+    TelemetryMsg's $defs through DaggerStatus.online_dagger (never top-level). Nothing of
+    the v1.0 shell's algorithm-specific models is exported any more."""
+    out = tmp_path / "schemas"
+    export(out)
+    index = json.loads((out / "index.json").read_text())
+    new_models = {
+        "OnlineDaggerConfig", "OnlineDaggerSessionInfo", "DatasetLayoutInfo",
+        "DatasetNamespaceInfo", "TrainerStatusAnnounce", "OnlineDaggerAnnounce",
+    }
+    assert new_models <= set(index["models"])
+    assert {f"{m}.json" for m in new_models} <= {p.name for p in out.iterdir()}
+    assert "OnlineDaggerStatus" not in index["models"]
+    assert not (out / "OnlineDaggerStatus.json").exists()
+    # every exported model that mentions DAgger is one of the shell's; the v1.0 names
+    # (algorithm config / paths / reference-gradient status) are gone with their files
+    assert {m for m in index["models"] if "Dagger" in m} == {
+        "OnlineDaggerConfig", "OnlineDaggerSessionInfo", "OnlineDaggerAnnounce",
+    }
+    assert not [p.name for p in out.iterdir() if "Grad" in p.name]
+
+    # SessionSpec.online_dagger: nullable $ref, default None, not required; field order kept.
+    spec = json.loads((out / "SessionSpec.json").read_text())
+    block = spec["properties"]["online_dagger"]
+    assert {"$ref": "#/$defs/OnlineDaggerConfig"} in block["anyOf"]
+    assert {"type": "null"} in block["anyOf"] and block["default"] is None
+    assert spec["required"] == ["mode", "kind", "arms", "frames"]
+    # (``properties`` keys are sorted in the export; field ORDER is pinned by the
+    # ``model_fields`` assertions in test_protocol.py — here we pin the SET and the shapes.)
+    assert {"action_filter", "return_to_start", "online_dagger"} <= set(spec["properties"])
+    assert set(spec["$defs"]) == {"ActionFilterConfig", "OnlineDaggerConfig"}
+    cfg = spec["$defs"]["OnlineDaggerConfig"]
+    cfg_top = json.loads((out / "OnlineDaggerConfig.json").read_text())
+    assert cfg["properties"] == cfg_top["properties"]  # same class, nested and top-level
+    assert cfg["required"] == cfg_top["required"] == ["session_name"]
+    assert "$defs" not in cfg_top  # flat body
+    assert set(cfg["properties"]) == {
+        "session_name", "resume", "pause_while_training", "wait_for_trainer_ready",
+    }
+    # the slug pattern rides the schema (the UI slugs against the same regex), with the
+    # length cap (64 — the name becomes a directory)
+    assert cfg["properties"]["session_name"] == {
+        "type": "string", "pattern": r"^[A-Za-z0-9][A-Za-z0-9_\-]*$", "maxLength": 64,
+        "title": "Session Name",
+    }
+    # unknown keys are a 422 (extra="forbid") — the sheet emits every key by name
+    assert cfg["additionalProperties"] is False and cfg_top["additionalProperties"] is False
+    assert cfg["properties"]["resume"] == {
+        "type": "boolean", "default": False, "title": "Resume",
+    }
+    for key, title in (("pause_while_training", "Pause While Training"),
+                       ("wait_for_trainer_ready", "Wait For Trainer Ready")):
+        assert cfg["properties"][key] == {"type": "boolean", "default": True, "title": title}
+    # SessionInfo echoes the same class (byte-identical $defs entry).
+    info = json.loads((out / "SessionInfo.json").read_text())
+    assert info["$defs"]["OnlineDaggerConfig"] == cfg
+    assert info["properties"]["online_dagger"]["default"] is None
+
+    # Telemetry: DaggerStatus.online_dagger -> OnlineDaggerStatus -> TrainerStatusAnnounce,
+    # all in one $defs; no iteration / history-row model.
+    telemetry = json.loads((out / "TelemetryMsg.json").read_text())
+    assert {"OnlineDaggerStatus", "TrainerStatusAnnounce"} <= set(telemetry["$defs"])
+    assert {n for n in telemetry["$defs"] if "Dagger" in n} == {
+        "DaggerStatus", "OnlineDaggerStatus",
+    }
+    dagger = telemetry["$defs"]["DaggerStatus"]
+    od = dagger["properties"]["online_dagger"]
+    assert {"$ref": "#/$defs/OnlineDaggerStatus"} in od["anyOf"]
+    assert {"type": "null"} in od["anyOf"] and od["default"] is None
+    assert "online_dagger" not in dagger["required"]
+    assert {"policy_stale", "online_dagger"} <= set(dagger["properties"])
+    status = telemetry["$defs"]["OnlineDaggerStatus"]
+    assert set(status["properties"]) == {
+        "session_name", "phase", "rollouts_saved", "detail", "trainer_alive", "trainer_age_s",
+        "trainer", "policy_version_acting", "expert_frames_session", "novice_frames_session",
+        "session_dir",
+    }
+    assert status["required"] == ["session_name", "phase", "rollouts_saved"]
+    assert status["properties"]["phase"] == {
+        "type": "string", "enum": ["waiting_trainer", "rollout", "training", "error"],
+        "title": "Phase",
+    }
+    assert status["properties"]["rollouts_saved"] == {
+        "type": "integer", "title": "Rollouts Saved",
+    }
+    trainer = status["properties"]["trainer"]
+    assert {"$ref": "#/$defs/TrainerStatusAnnounce"} in trainer["anyOf"]
+    assert {"type": "null"} in trainer["anyOf"] and trainer["default"] is None
+    assert status["properties"]["session_dir"] == {
+        "type": "string", "default": "", "title": "Session Dir",
+    }
+    for key, title in (("expert_frames_session", "Expert Frames Session"),
+                       ("novice_frames_session", "Novice Frames Session")):
+        assert status["properties"][key] == {"type": "integer", "default": 0, "title": title}
+    # The trainer payload is the SAME class top-level and nested (byte-identical schema body).
+    trainer_top = json.loads((out / "TrainerStatusAnnounce.json").read_text())
+    nested = telemetry["$defs"]["TrainerStatusAnnounce"]
+    assert nested["properties"] == trainer_top["properties"]
+    assert nested["required"] == trainer_top["required"] == ["trainer_id", "node_version"]
+    assert set(trainer_top["properties"]) == {
+        "mavis_schema", "trainer_id", "node_version", "state", "session_id", "policy_version",
+        "progress", "metrics", "detail", "uptime_s",
+    }
+    assert trainer_top["properties"]["state"] == {
+        "type": "string", "enum": ["idle", "preparing", "training", "ready", "error"],
+        "default": "idle", "title": "State",
+    }
+    assert trainer_top["properties"]["progress"] == {
+        "type": "number", "default": 0.0, "minimum": 0, "maximum": 1, "title": "Progress",
+    }
+    assert trainer_top["properties"]["metrics"] == {
+        "type": "object", "additionalProperties": {"type": "number"}, "default": {},
+        "title": "Metrics",
+    }
+    assert trainer_top["properties"]["uptime_s"] == {
+        "type": "number", "default": 0.0, "minimum": 0, "title": "Uptime S",
+    }
+    session_id = trainer_top["properties"]["session_id"]
+    assert {"type": "string"} in session_id["anyOf"] and {"type": "null"} in session_id["anyOf"]
+    assert session_id["default"] is None
+    assert "$defs" not in trainer_top  # a flat payload: no nested block
+
+    # External: SessionAnnounce.online_dagger + OnlineDaggerAnnounce,
+    # PolicySpecAnnounce.capabilities.
+    announce = json.loads((out / "SessionAnnounce.json").read_text())
+    assert {"deprecated_keys", "online_dagger"} <= set(announce["properties"])
+    oda = announce["properties"]["online_dagger"]
+    assert {"$ref": "#/$defs/OnlineDaggerAnnounce"} in oda["anyOf"]
+    assert {"type": "null"} in oda["anyOf"] and oda["default"] is None
+    assert {"OnlineDaggerAnnounce", "OnlineDaggerConfig", "SessionSpec"} <= set(announce["$defs"])
+    paths = json.loads((out / "OnlineDaggerAnnounce.json").read_text())
+    assert announce["$defs"]["OnlineDaggerAnnounce"]["properties"] == paths["properties"]
+    assert paths["required"] == [  # ``required`` is a list: field order survives the export
+        "session_name", "session_dir", "rollouts_dir",
+    ]
+    assert set(paths["properties"]) == set(paths["required"])  # nothing optional
+    assert "$defs" not in paths  # flat body
+    policy_spec = json.loads((out / "PolicySpecAnnounce.json").read_text())
+    assert "capabilities" in policy_spec["properties"]
+    assert policy_spec["properties"]["capabilities"] == {
+        "type": "array", "items": {"type": "string"}, "default": [], "title": "Capabilities",
+    }
+    assert "capabilities" not in policy_spec["required"]
+
+    # REST rows: GET /api/online_dagger/sessions and GET /api/datasets/layout; DatasetInfo
+    # gains namespace / path (defaulted).
+    row = json.loads((out / "OnlineDaggerSessionInfo.json").read_text())
+    assert set(row["properties"]) == {
+        "session_name", "path", "created_at", "task", "rollouts", "last_used_at",
+    }
+    assert row["required"] == ["session_name", "path", "created_at", "task", "rollouts"]
+    task = row["properties"]["task"]
+    assert {"type": "string"} in task["anyOf"] and {"type": "null"} in task["anyOf"]
+    assert "default" not in task  # required-but-nullable, like SessionSpec.task
+    assert row["properties"]["rollouts"] == {"type": "integer", "title": "Rollouts"}
+    assert row["properties"]["last_used_at"]["default"] is None
+    assert "$defs" not in row
+    layout = json.loads((out / "DatasetLayoutInfo.json").read_text())
+    assert layout["required"] == ["default_namespace", "generic_root", "namespaces"]
+    assert set(layout["properties"]) == set(layout["required"])
+    assert layout["properties"]["namespaces"] == {
+        "type": "object", "additionalProperties": {"$ref": "#/$defs/DatasetNamespaceInfo"},
+        "title": "Namespaces",
+    }
+    ns = json.loads((out / "DatasetNamespaceInfo.json").read_text())
+    assert layout["$defs"]["DatasetNamespaceInfo"]["properties"] == ns["properties"]
+    assert set(ns["properties"]) == {"root", "subdir"} and ns["required"] == ["root"]
+    assert ns["properties"]["subdir"]["default"] is None
+    dataset = json.loads((out / "DatasetInfo.json").read_text())
+    assert {"namespace", "path"} <= set(dataset["properties"])
+    for key, title in (("namespace", "Namespace"), ("path", "Path")):
+        assert dataset["properties"][key] == {"type": "string", "default": "", "title": title}
+        assert key not in dataset["required"]
+
+
+def test_goto_profile_args_schema(tmp_path):
+    """2026-09-08: ``GotoProfileArgs`` exports top-level, closed, with ``profile_id``
+    required and its ProfileStore-charset ``pattern`` exposed so the UI can validate
+    before sending; ``goto_profile`` is the last ``ActionMsg.name`` enum member."""
+    out = tmp_path / "schemas"
+    export(out)
+    schema = json.loads((out / "GotoProfileArgs.json").read_text())
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == ["profile_id"]
+    assert set(schema["properties"]) == {"profile_id"}
+    assert schema["properties"]["profile_id"] == {
+        "type": "string", "pattern": r"^[A-Za-z0-9_\-]+$", "title": "Profile Id",
+    }
+    assert "$defs" not in schema
+    for name in ("ActionMsg", "AckMsg"):
+        enum = json.loads((out / f"{name}.json").read_text())["properties"]["name"]["enum"]
+        assert enum[-1] == "goto_profile" and enum[-4:-1] == ["takeover", "handback", "train_now"]
+    index = json.loads((out / "index.json").read_text())
+    assert "GotoProfileArgs" in index["models"]

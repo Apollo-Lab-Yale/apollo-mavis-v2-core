@@ -701,6 +701,22 @@
           "title": "New Label Frames",
           "type": "integer"
         },
+        "online_dagger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnlineDaggerStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "policy_stale": {
+          "default": false,
+          "title": "Policy Stale",
+          "type": "boolean"
+        },
         "policy_version": {
           "anyOf": [
             {
@@ -754,15 +770,91 @@
       "title": "DaggerStatus",
       "type": "object"
     },
-    "EpisodeStatus": {
-      "description": "Episode recorder status (collect/DAgger).",
+    "DatasetExportTelemetry": {
+      "description": "``TelemetryMsg.datasets.export`` (additive, 2026-09-07; 04-runtime \u00a710.6):\nthe running / last LeRobot v3 export job. ``phase`` walks scanning -> videos\n-> data -> meta -> validating -> done | failed; ``done`` / ``total`` count the\ncurrent phase's units (episodes for videos / data, 1 for meta / validating);\n``detail`` names the file being written or the failure.",
       "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "done": {
+          "default": 0,
+          "title": "Done",
+          "type": "integer"
+        },
+        "format": {
+          "title": "Format",
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "scanning",
+            "videos",
+            "data",
+            "meta",
+            "validating",
+            "done",
+            "failed"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "repo_id": {
+          "title": "Repo Id",
+          "type": "string"
+        },
+        "total": {
+          "default": 0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "repo_id",
+        "format",
+        "phase"
+      ],
+      "title": "DatasetExportTelemetry",
+      "type": "object"
+    },
+    "DatasetsTelemetry": {
+      "description": "``TelemetryMsg.datasets`` (additive, 2026-09-07): session-less like the\nmicrophone block; ``export`` is None until an export has run in this process.",
+      "properties": {
+        "export": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DatasetExportTelemetry"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "DatasetsTelemetry",
+      "type": "object"
+    },
+    "EpisodeStatus": {
+      "description": "Episode recorder status (collect/DAgger).\n\n``returning`` (additive, 2026-09-07; 04-runtime \u00a710.5): after a save or a\ndiscard the arms are being driven back to the session's return profile (the\n``start_from`` profile, else the workcell's initial condition) on the twin\nplanner; ``episode_new`` is refused meanwhile. The dataset fields are\nadditive too: ``repo_id`` / ``total_episodes`` / ``total_frames`` mirror the\ndataset manifest (saved episodes), ``detail`` is a short human-readable note\n(\"returning to profile 'ready'\", \"return cancelled: movement key\",\n\"recorder degraded ...\"). Deletion is immediate (one directory, 10-frames\n\u00a711.7), so there is no pending-deletion list.",
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
         "duration_s": {
           "title": "Duration S",
           "type": "number"
         },
         "frames": {
           "title": "Frames",
+          "type": "integer"
+        },
+        "frames_skipped": {
+          "default": 0,
+          "title": "Frames Skipped",
           "type": "integer"
         },
         "index": {
@@ -776,14 +868,37 @@
           ],
           "title": "Index"
         },
+        "repo_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repo Id"
+        },
         "state": {
           "enum": [
             "idle",
             "recording",
-            "saving"
+            "saving",
+            "returning"
           ],
           "title": "State",
           "type": "string"
+        },
+        "total_episodes": {
+          "default": 0,
+          "title": "Total Episodes",
+          "type": "integer"
+        },
+        "total_frames": {
+          "default": 0,
+          "title": "Total Frames",
+          "type": "integer"
         }
       },
       "required": [
@@ -793,6 +908,180 @@
         "duration_s"
       ],
       "title": "EpisodeStatus",
+      "type": "object"
+    },
+    "ExternalStatus": {
+      "description": "``telemetry.external`` (14-dora \u00a713): the bridge + external-policy state.",
+      "properties": {
+        "action_age_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action Age S"
+        },
+        "actions_late": {
+          "default": 0,
+          "title": "Actions Late",
+          "type": "integer"
+        },
+        "capabilities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "dataflow_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataflow Id"
+        },
+        "dataflow_restarts": {
+          "default": 0,
+          "title": "Dataflow Restarts",
+          "type": "integer"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "dropped_inputs": {
+          "default": 0,
+          "title": "Dropped Inputs",
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "idle_reader": {
+          "default": "off",
+          "enum": [
+            "off",
+            "running",
+            "paused",
+            "stale"
+          ],
+          "title": "Idle Reader",
+          "type": "string"
+        },
+        "node_id": {
+          "default": "mavis_runtime",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "policy_attached": {
+          "default": false,
+          "title": "Policy Attached",
+          "type": "boolean"
+        },
+        "policy_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Policy Id"
+        },
+        "policy_rate_hz": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Policy Rate Hz"
+        },
+        "policy_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Policy Version"
+        },
+        "publish_hz": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "default": {},
+          "title": "Publish Hz",
+          "type": "object"
+        },
+        "reattach_count": {
+          "default": 0,
+          "title": "Reattach Count",
+          "type": "integer"
+        },
+        "spec_age_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spec Age S"
+        },
+        "state": {
+          "default": "disabled",
+          "enum": [
+            "disabled",
+            "unavailable",
+            "attached",
+            "detached",
+            "closed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "trainer_status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrainerStatusAnnounce"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "version_changes_mid_episode": {
+          "default": 0,
+          "title": "Version Changes Mid Episode",
+          "type": "integer"
+        }
+      },
+      "title": "ExternalStatus",
       "type": "object"
     },
     "HardwareMonitorTelemetry": {
@@ -845,6 +1134,11 @@
           ],
           "default": null,
           "title": "Engaged Arm"
+        },
+        "policy_stale": {
+          "default": false,
+          "title": "Policy Stale",
+          "type": "boolean"
         },
         "policy_version": {
           "anyOf": [
@@ -1094,6 +1388,96 @@
       "title": "MicrophoneTelemetry",
       "type": "object"
     },
+    "OnlineDaggerStatus": {
+      "description": "``DaggerStatus.online_dagger`` (additive, phase-14; 15-online-dagger \u00a73/\u00a75): the\nruntime's rollout-level shell state as the UI sees it. ``phase`` is\n``waiting_trainer`` (until the trainer reports ``ready`` for THIS session, when\n``wait_for_trainer_ready``) -> ``rollout`` -> ``training`` (the trainer reports\n``training``; ``episode_new`` refused while ``pause_while_training``) -> ``rollout``\n...; ``error`` mirrors a trainer error until a non-error status arrives. The shell\ncounts kept rollouts and the session's actor split \u2014 never iterations, which are\nthe trainer's business. ``detail`` is the operator-facing reason ``episode_new`` is\nrefused (or the trainer's detail); ``trainer`` is the last ``TrainerStatusAnnounce``\nverbatim and ``trainer_alive`` / ``trainer_age_s`` its freshness (<=\n``dora.policy.spec_stale_s``); ``policy_version_acting`` follows the announced\nspec / action version (a change shows as \"swapped\" in the panel).",
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "expert_frames_session": {
+          "default": 0,
+          "title": "Expert Frames Session",
+          "type": "integer"
+        },
+        "novice_frames_session": {
+          "default": 0,
+          "title": "Novice Frames Session",
+          "type": "integer"
+        },
+        "phase": {
+          "enum": [
+            "waiting_trainer",
+            "rollout",
+            "training",
+            "error"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "policy_version_acting": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Policy Version Acting"
+        },
+        "rollouts_saved": {
+          "title": "Rollouts Saved",
+          "type": "integer"
+        },
+        "session_dir": {
+          "default": "",
+          "title": "Session Dir",
+          "type": "string"
+        },
+        "session_name": {
+          "title": "Session Name",
+          "type": "string"
+        },
+        "trainer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrainerStatusAnnounce"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "trainer_age_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trainer Age S"
+        },
+        "trainer_alive": {
+          "default": false,
+          "title": "Trainer Alive",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "session_name",
+        "phase",
+        "rollouts_saved"
+      ],
+      "title": "OnlineDaggerStatus",
+      "type": "object"
+    },
     "PoseMsg": {
       "description": "Wire pose: position in m, orientation as wxyz unit quaternion.",
       "properties": {
@@ -1160,6 +1544,11 @@
           "default": null,
           "title": "Bringup"
         },
+        "fault_detail": {
+          "default": "",
+          "title": "Fault Detail",
+          "type": "string"
+        },
         "plan_status": {
           "anyOf": [
             {
@@ -1199,6 +1588,23 @@
           ],
           "default": null,
           "title": "Trainer Alive"
+        },
+        "translate_frame": {
+          "anyOf": [
+            {
+              "enum": [
+                "camera",
+                "world",
+                "base"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Translate Frame"
         }
       },
       "required": [
@@ -1437,7 +1843,7 @@
       "description": "Live tracker teleop settings echoed in telemetry (13-tracker \u00a73.5, \u00a74).\n\nThe ``filter_*`` fields are the *effective* One Euro pose-filter settings\n(config defaults, overridable live via ``tracker_settings``); they default\nhere so pre-filter producers still validate.",
       "properties": {
         "filter_beta": {
-          "default": 0.05,
+          "default": 5.0,
           "title": "Filter Beta",
           "type": "number"
         },
@@ -1762,6 +2168,85 @@
       "title": "TrainerStatus",
       "type": "object"
     },
+    "TrainerStatusAnnounce": {
+      "description": "The ``policy_trainer_status`` input payload (15-online-dagger \u00a76): JSON on the\npolicy node's ``trainer_status`` output, heartbeated at 1 Hz (and on change) while\nan Online DAgger session is announced. Generic by design \u2014 the runtime knows no\nDAgger variant. ``state`` walks idle -> preparing -> ready (the shell lets rollouts\nstart) -> training (``episode_new`` refused while ``pause_while_training``) ->\nready (weights swapped, ``policy_version`` bumped); ``error`` carries ``detail``.\n``session_id`` MUST echo the served ``SessionAnnounce.session_id``: another\nsession's id is ignored outright, ``None`` counts as \"trainer alive\" only.\n``metrics`` is a free-form dict of finite scalars (``loss``, ``proj_rate``, ...)\nthe Cockpit lists verbatim (a ``loss`` key gets the sparkline). Metadata: the\ncommon inbound keys (``client``, ``seq``, ``t_mono``, ``wallclock_ns``,\n``mavis_schema``), same ``seq`` counter as the node's other outputs. Field order\nis the contract (both goldens pin it). Every float refuses inf / nan\n(``allow_inf_nan=False``; a diverged loss is reported as ``state: \"error\"`` +\n``detail``, never as a non-finite number) \u2014 that rule leaves the JSON schema\nalone.",
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "mavis_schema": {
+          "default": 1,
+          "title": "Mavis Schema",
+          "type": "integer"
+        },
+        "metrics": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "default": {},
+          "title": "Metrics",
+          "type": "object"
+        },
+        "node_version": {
+          "title": "Node Version",
+          "type": "string"
+        },
+        "policy_version": {
+          "default": 0,
+          "title": "Policy Version",
+          "type": "integer"
+        },
+        "progress": {
+          "default": 0.0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Progress",
+          "type": "number"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "state": {
+          "default": "idle",
+          "enum": [
+            "idle",
+            "preparing",
+            "training",
+            "ready",
+            "error"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "trainer_id": {
+          "title": "Trainer Id",
+          "type": "string"
+        },
+        "uptime_s": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Uptime S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "trainer_id",
+        "node_version"
+      ],
+      "title": "TrainerStatusAnnounce",
+      "type": "object"
+    },
     "TwinOverlayTelemetry": {
       "description": "One digital-twin overlay stream (``<camera_id>_align``; 04-runtime \u00a713.4).\n\n``rail_fallback_m`` is set while the track is not homed and the twin\nassumes a configured rail position instead (``detail`` spells it out for\nthe tile caption); ``joint1_offset_rad`` echoes the diagnostic knob (0 =\nthe verified identity convention); ``mask_fraction`` is robot pixels /\nimage pixels of the last composited frame (0 = the twin sees no robot from\nthis camera).",
       "properties": {
@@ -1902,6 +2387,17 @@
         }
       ]
     },
+    "datasets": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DatasetsTelemetry"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "episode": {
       "anyOf": [
         {
@@ -1915,6 +2411,17 @@
     "epoch": {
       "title": "Epoch",
       "type": "string"
+    },
+    "external": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExternalStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "hardware_monitor": {
       "anyOf": [

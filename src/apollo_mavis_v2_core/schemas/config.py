@@ -88,6 +88,12 @@ class CameraConfig(BaseModel):
     intrinsics: CameraIntrinsics | None = None
     extrinsics_frame: FrameRef | None = None  # frame the calibration is expressed in
     extrinsics_file: str | None = None  # calibration file path (spine §3.1)
+    # additive (phase-12; 14-dora §4.2 "Depth"): realsense only - enable the z16 depth
+    # stream and publish it as CameraFrame.depth; align_depth_to_color runs rs.align
+    # in the capture thread so depth pixels index the colour image. Ignored by v4l2/sim
+    # producers (the sim depth sibling is selected by the runtime's dora config).
+    depth: bool = False
+    align_depth_to_color: bool = True
 
 
 class WorkcellConfig(BaseModel):

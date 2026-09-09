@@ -1,0 +1,26 @@
+{
+  "description": "One mapped dataset namespace (``DatasetLayoutInfo.namespaces[ns]``; 15-online-dagger\n\u00a77 / D5): its datasets live at ``<root>/<name>`` or, with ``subdir``, at\n``<root>/<name>/<subdir>`` (``online_dagger`` -> ``~/data/online_dagger/<s>/rollouts``).",
+  "properties": {
+    "root": {
+      "title": "Root",
+      "type": "string"
+    },
+    "subdir": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Subdir"
+    }
+  },
+  "required": [
+    "root"
+  ],
+  "title": "DatasetNamespaceInfo",
+  "type": "object"
+}

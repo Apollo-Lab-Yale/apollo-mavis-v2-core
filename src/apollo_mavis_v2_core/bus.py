@@ -28,7 +28,7 @@ class Command:
     op: str  # ActionName values + internal ops ("end_session", "load_profile", ...)
     args: dict[str, Any] = field(default_factory=dict)
     corr_id: str = field(default_factory=lambda: uuid.uuid4().hex)
-    source: Literal["ws", "rest", "internal"] = "ws"
+    source: Literal["ws", "rest", "internal", "dora"] = "ws"  # "dora": external bus (14-dora)
 
 
 @dataclass(frozen=True)

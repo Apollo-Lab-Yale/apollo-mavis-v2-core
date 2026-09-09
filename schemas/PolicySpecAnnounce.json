@@ -1,0 +1,182 @@
+{
+  "$defs": {
+    "PolicySpecModel": {
+      "description": "Pydantic mirror of core ``interfaces.policy.PolicySpec`` (the dataclass is\nnot a wire model); the layout the policy node declares.",
+      "properties": {
+        "action_frame": {
+          "title": "Action Frame",
+          "type": "string"
+        },
+        "action_names": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Action Names",
+          "type": "array"
+        },
+        "action_space": {
+          "enum": [
+            "delta_ee",
+            "abs_ee",
+            "joint"
+          ],
+          "title": "Action Space",
+          "type": "string"
+        },
+        "camera_keys": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Camera Keys",
+          "type": "array"
+        },
+        "state_names": {
+          "items": {
+            "type": "string"
+          },
+          "title": "State Names",
+          "type": "array"
+        },
+        "version": {
+          "default": 0,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "action_space",
+        "action_frame",
+        "action_names",
+        "state_names"
+      ],
+      "title": "PolicySpecModel",
+      "type": "object"
+    }
+  },
+  "description": "The ``policy_spec`` input payload (14-dora \u00a76.2), heartbeated at 1 Hz by the\npolicy node.",
+  "properties": {
+    "acts_total": {
+      "default": 0,
+      "title": "Acts Total",
+      "type": "integer"
+    },
+    "capabilities": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "chunk_dt_s": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Chunk Dt S"
+    },
+    "chunk_len": {
+      "default": 1,
+      "title": "Chunk Len",
+      "type": "integer"
+    },
+    "detail": {
+      "default": "",
+      "title": "Detail",
+      "type": "string"
+    },
+    "device": {
+      "default": "",
+      "title": "Device",
+      "type": "string"
+    },
+    "extrinsics_sha": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Extrinsics Sha"
+    },
+    "health": {
+      "default": "ok",
+      "enum": [
+        "ok",
+        "degraded",
+        "error"
+      ],
+      "title": "Health",
+      "type": "string"
+    },
+    "last_compute_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Compute Ms"
+    },
+    "loader": {
+      "default": "custom",
+      "title": "Loader",
+      "type": "string"
+    },
+    "mavis_schema": {
+      "default": 1,
+      "title": "Mavis Schema",
+      "type": "integer"
+    },
+    "node_version": {
+      "title": "Node Version",
+      "type": "string"
+    },
+    "policy_id": {
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "policy_version": {
+      "title": "Policy Version",
+      "type": "integer"
+    },
+    "rate_hz": {
+      "title": "Rate Hz",
+      "type": "number"
+    },
+    "spec": {
+      "$ref": "#/$defs/PolicySpecModel"
+    },
+    "supports_reload": {
+      "default": false,
+      "title": "Supports Reload",
+      "type": "boolean"
+    },
+    "uptime_s": {
+      "default": 0.0,
+      "title": "Uptime S",
+      "type": "number"
+    }
+  },
+  "required": [
+    "policy_id",
+    "policy_version",
+    "node_version",
+    "spec",
+    "rate_hz"
+  ],
+  "title": "PolicySpecAnnounce",
+  "type": "object"
+}

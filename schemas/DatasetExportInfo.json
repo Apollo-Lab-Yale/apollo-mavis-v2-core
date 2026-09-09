@@ -1,0 +1,60 @@
+{
+  "description": "``manifest.last_export`` as the REST sees it (10-frames \u00a711.5; 04-runtime \u00a710.6).\n\n``state``: ``none`` = never exported, ``fresh`` = the export matches the episode\nset, ``stale`` = an episode was added / deleted since, ``running`` = the export\njob is on it right now (process-local), ``failed`` = the last job failed\n(``detail`` carries the reason, until the next success).",
+  "properties": {
+    "at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "At"
+    },
+    "detail": {
+      "default": "",
+      "title": "Detail",
+      "type": "string"
+    },
+    "episodes": {
+      "default": 0,
+      "title": "Episodes",
+      "type": "integer"
+    },
+    "format": {
+      "default": "lerobot_v3",
+      "title": "Format",
+      "type": "string"
+    },
+    "path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Path"
+    },
+    "state": {
+      "enum": [
+        "none",
+        "stale",
+        "fresh",
+        "running",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "state"
+  ],
+  "title": "DatasetExportInfo",
+  "type": "object"
+}

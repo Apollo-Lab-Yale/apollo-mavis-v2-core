@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from apollo_mavis_v2_core.dagger.types import ControlMode, TrainerStatus
+from apollo_mavis_v2_core.protocol.external import ExternalStatus, TrainerStatusAnnounce
 from apollo_mavis_v2_core.protocol.hardware_monitor import HardwareMonitorTelemetry
 from apollo_mavis_v2_core.protocol.microphone import MicStatus
 from apollo_mavis_v2_core.schemas.safety import CollisionReport
@@ -57,12 +58,79 @@ class ClearanceItem(BaseModel):
 
 
 class EpisodeStatus(BaseModel):
-    """Episode recorder status (collect/DAgger)."""
+    """Episode recorder status (collect/DAgger).
 
-    state: Literal["idle", "recording", "saving"]
+    ``returning`` (additive, 2026-09-07; 04-runtime §10.5): after a save or a
+    discard the arms are being driven back to the session's return profile (the
+    ``start_from`` profile, else the workcell's initial condition) on the twin
+    planner; ``episode_new`` is refused meanwhile. The dataset fields are
+    additive too: ``repo_id`` / ``total_episodes`` / ``total_frames`` mirror the
+    dataset manifest (saved episodes), ``detail`` is a short human-readable note
+    ("returning to profile 'ready'", "return cancelled: movement key",
+    "recorder degraded ..."). Deletion is immediate (one directory, 10-frames
+    §11.7), so there is no pending-deletion list.
+    """
+
+    state: Literal["idle", "recording", "saving", "returning"]
     index: int | None
     frames: int
     duration_s: float
+    repo_id: str | None = None
+    total_episodes: int = 0
+    total_frames: int = 0
+    detail: str = ""
+    frames_skipped: int = 0  # additive (2026-09-07): idle frames the action filter dropped
+    #   in the open episode (04-runtime §10.5)
+
+
+class DatasetExportTelemetry(BaseModel):
+    """``TelemetryMsg.datasets.export`` (additive, 2026-09-07; 04-runtime §10.6):
+    the running / last LeRobot v3 export job. ``phase`` walks scanning -> videos
+    -> data -> meta -> validating -> done | failed; ``done`` / ``total`` count the
+    current phase's units (episodes for videos / data, 1 for meta / validating);
+    ``detail`` names the file being written or the failure."""
+
+    repo_id: str
+    format: str
+    phase: Literal["scanning", "videos", "data", "meta", "validating", "done", "failed"]
+    done: int = 0
+    total: int = 0
+    detail: str = ""
+
+
+class DatasetsTelemetry(BaseModel):
+    """``TelemetryMsg.datasets`` (additive, 2026-09-07): session-less like the
+    microphone block; ``export`` is None until an export has run in this process."""
+
+    export: DatasetExportTelemetry | None = None
+
+
+class OnlineDaggerStatus(BaseModel):
+    """``DaggerStatus.online_dagger`` (additive, phase-14; 15-online-dagger §3/§5): the
+    runtime's rollout-level shell state as the UI sees it. ``phase`` is
+    ``waiting_trainer`` (until the trainer reports ``ready`` for THIS session, when
+    ``wait_for_trainer_ready``) -> ``rollout`` -> ``training`` (the trainer reports
+    ``training``; ``episode_new`` refused while ``pause_while_training``) -> ``rollout``
+    ...; ``error`` mirrors a trainer error until a non-error status arrives. The shell
+    counts kept rollouts and the session's actor split — never iterations, which are
+    the trainer's business. ``detail`` is the operator-facing reason ``episode_new`` is
+    refused (or the trainer's detail); ``trainer`` is the last ``TrainerStatusAnnounce``
+    verbatim and ``trainer_alive`` / ``trainer_age_s`` its freshness (<=
+    ``dora.policy.spec_stale_s``); ``policy_version_acting`` follows the announced
+    spec / action version (a change shows as "swapped" in the panel).
+    """
+
+    session_name: str
+    phase: Literal["waiting_trainer", "rollout", "training", "error"]
+    rollouts_saved: int  # kept rollouts of the session (a resume continues the count)
+    detail: str = ""  # why episode_new is refused, trainer detail
+    trainer_alive: bool = False  # a fresh trainer_status (<= spec_stale_s)
+    trainer_age_s: float | None = None
+    trainer: TrainerStatusAnnounce | None = None  # verbatim last status
+    policy_version_acting: int | None = None
+    expert_frames_session: int = 0  # kept expert frames this session (actor == 1)
+    novice_frames_session: int = 0  # kept novice frames this session (actor == 0)
+    session_dir: str = ""  # ~/data/online_dagger/<session_name>
 
 
 class DaggerStatus(BaseModel):
@@ -78,6 +146,10 @@ class DaggerStatus(BaseModel):
     takeover_rate_run: float = 0.0  # rolling mean, last 10 episodes
     new_label_frames: int = 0
     trainer: TrainerStatus | None = None
+    policy_stale: bool = False  # additive (phase-12; promised by 04-runtime §15): the
+    #   policy output is past its staleness window -> policy arms hold (12-dagger §6.3)
+    online_dagger: OnlineDaggerStatus | None = None  # additive (phase-14; 15-online-dagger
+    #   §5): non-null iff the session's SessionSpec.online_dagger is set; appended last
 
 
 class InferenceStatus(BaseModel):
@@ -86,6 +158,7 @@ class InferenceStatus(BaseModel):
     control_mode: ControlMode
     engaged_arm: str | None = None  # additive vs 05-ui
     policy_version: str | None
+    policy_stale: bool = False  # additive (phase-12): see DaggerStatus.policy_stale
 
 
 class ArmBringupTelemetry(BaseModel):
@@ -113,6 +186,22 @@ class SessionTelemetry(BaseModel):
     trainer_alive: bool | None = None
     bringup: list[ArmBringupTelemetry] | None = None  # additive (phase-09c): hardware
     #   bring-up progress per arm/step; None for sim sessions and once cleared
+    translate_frame: Literal["camera", "world", "base"] | None = None
+    #   additive (2026-09-08): the frame the keyboard TRANSLATE keys act in for this
+    #   session (runtime ``control.translate_frame``; rotations are always about the
+    #   TCP axes). The runtime default is ``world`` (operator-fixed; operator decision
+    #   2026-09-08, 15-pro-dagger §0 item 8); ``camera`` (the active arm's wrist
+    #   camera) and ``base`` (the pre-2026-09-08 behaviour) remain selectable. The
+    #   keymap labels the KEY axes, not a frame, so the overlay needs this to tell
+    #   the operator what "forward" currently means. None = no session.
+    fault_detail: str = ""  # additive (2026-09-08; 04-runtime §13.3): the session
+    #   manager's session-level notice the per-arm rows do NOT already carry - a
+    #   ``start_from`` plan the loop refused ("start_from refused: Manipulation Arm
+    #   faulted (controller state 4, code C24) - use Clear errors & resume, then Go to
+    #   profile") or could not plan, the outcome of a "Go to profile" / `R` return that
+    #   did not arrive ("Go to profile 'shelf': the digital twin could not plan ..."),
+    #   or the fault text while no arm row shows one (a fault before the first
+    #   snapshot). "" = nothing to say; shown verbatim by the Cockpit's FaultBanner.
 
 
 class TrackerSettingsMsg(BaseModel):
@@ -128,7 +217,8 @@ class TrackerSettingsMsg(BaseModel):
     follow_rotation: bool  # orientation deltas applied when True
     filter_enabled: bool = True  # One Euro pose filter active (additive)
     filter_min_cutoff_hz: float = 1.0  # One Euro min cutoff, Hz (additive)
-    filter_beta: float = 0.05  # One Euro speed coefficient (additive)
+    filter_beta: float = 5.0  # One Euro speed coefficient, Hz per (m/s) (additive;
+    #   5.0 = the runtime's effective default since 2026-09-07, 13-tracker §4)
 
 
 class ControllerTelemetry(BaseModel):
@@ -259,7 +349,9 @@ class TelemetryMsg(BaseModel):
     session: SessionTelemetry | None = None  # additive
     tracker: TrackerTelemetry | None = None  # additive (13-tracker §3.5)
     microphone: MicrophoneTelemetry | None = None  # additive (phase-11)
+    external: ExternalStatus | None = None  # additive (phase-12): dora bridge + external policy
     hardware_monitor: HardwareMonitorTelemetry | None = None  # additive (phase-09a)
+    datasets: DatasetsTelemetry | None = None  # additive (2026-09-07): export job progress
 
 
 __all__ = [
@@ -267,6 +359,9 @@ __all__ = [
     "ArmTelemetry",
     "ClearanceItem",
     "EpisodeStatus",
+    "DatasetExportTelemetry",
+    "DatasetsTelemetry",
+    "OnlineDaggerStatus",
     "DaggerStatus",
     "InferenceStatus",
     "ArmBringupTelemetry",

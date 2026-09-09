@@ -120,3 +120,22 @@ def test_gripper_state_open_frac_range() -> None:
     with pytest.raises(ValueError):
         GripperState(open_frac=2.0)
     assert GripperState(open_frac=0.0).open_frac == 0.0
+
+
+def test_camera_frame_depth_is_additive_and_validated() -> None:
+    """phase-12 (14-dora §4.2 "Depth"): (H, W) uint16 sibling; None by default."""
+    rgb = np.zeros((4, 6, 3), dtype=np.uint8)
+    plain = CameraFrame("cam0", rgb=rgb, t_mono=0.0, wallclock_ns=0)
+    assert plain.depth is None and plain.depth_scale_m == 0.001
+    depth = np.full((4, 6), 1234, dtype=np.uint16)
+    frame = CameraFrame("cam0", rgb=rgb, t_mono=0.0, wallclock_ns=0, depth=depth)
+    assert frame.depth is not None and frame.depth.shape == (4, 6)
+    assert frame.depth.dtype == np.uint16
+    with pytest.raises(ValueError):  # H/W must match the rgb image
+        CameraFrame("cam0", rgb=rgb, t_mono=0.0, wallclock_ns=0,
+                    depth=np.zeros((6, 4), dtype=np.uint16))
+    with pytest.raises(ValueError):  # dtype is uint16 (mm at the default scale)
+        CameraFrame("cam0", rgb=rgb, t_mono=0.0, wallclock_ns=0,
+                    depth=np.zeros((4, 6), dtype=np.float32))
+    with pytest.raises(ValueError):
+        CameraFrame("cam0", rgb=rgb, t_mono=0.0, wallclock_ns=0, depth_scale_m=0.0)

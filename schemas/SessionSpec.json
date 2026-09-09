@@ -1,12 +1,117 @@
 {
+  "$defs": {
+    "ActionFilterConfig": {
+      "description": "Idle-frame filter parameters (10-frames \u00a711.4; 04-runtime \u00a710.5; 2026-09-07,\noperator): the pro-dagger hesitation heuristic ported to the frame stream. A\ncandidate frame whose commanded TCP (Chebyshev over xyz / geodesic angle),\ngripper fraction and rail slot are all within the epsilons of the LAST KEPT\nframe \u2014 and that has no gripper change within \u00b1``gripper_context_s`` \u2014 is not\nrecorded. Defaults = pro-dagger's 1 mm / 1e-3 / 1 mm per step and its one\nH=16 chunk at 10 Hz of gripper context; ``enabled: false`` records every\nframe. DAgger filters human-controlled frames only.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "gripper_context_s": {
+          "default": 1.6,
+          "minimum": 0,
+          "title": "Gripper Context S",
+          "type": "number"
+        },
+        "gripper_eps_frac": {
+          "default": 0.01,
+          "minimum": 0,
+          "title": "Gripper Eps Frac",
+          "type": "number"
+        },
+        "pos_eps_m": {
+          "default": 0.001,
+          "minimum": 0,
+          "title": "Pos Eps M",
+          "type": "number"
+        },
+        "rail_eps_m": {
+          "default": 0.001,
+          "minimum": 0,
+          "title": "Rail Eps M",
+          "type": "number"
+        },
+        "rot_eps_rad": {
+          "default": 0.001,
+          "minimum": 0,
+          "title": "Rot Eps Rad",
+          "type": "number"
+        }
+      },
+      "title": "ActionFilterConfig",
+      "type": "object"
+    },
+    "OnlineDaggerConfig": {
+      "additionalProperties": false,
+      "description": "Online DAgger session parameters (15-online-dagger \u00a75; phase-14, 2026-09-08).\n\nThe runtime is the algorithm-agnostic SHELL (operator decision 2026-09-08): it\nperforms rollouts, exposes take-over / hand-back, labels every step novice /\nexpert, saves the kept rollouts and reports what the trainer says. Which DAgger\nvariant runs, its hyper-parameters and every training artefact belong to the\ntrainer node in the policy repo, so this block carries NO algorithm settings\n\u2014 only what the shell itself needs: the session directory name, whether an\nexisting one is continued, and the two generic gates on ``episode_new``.\n\n``extra=\"forbid\"``: an unknown key is a 422 at POST, never silently dropped \u2014\na hyper-parameter typed here by mistake would otherwise vanish while the\noperator believes it travelled (the trainer configures itself; the runtime\nnever forwards hyper-parameters).",
+      "properties": {
+        "pause_while_training": {
+          "default": true,
+          "title": "Pause While Training",
+          "type": "boolean"
+        },
+        "resume": {
+          "default": false,
+          "title": "Resume",
+          "type": "boolean"
+        },
+        "session_name": {
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_\\-]*$",
+          "title": "Session Name",
+          "type": "string"
+        },
+        "wait_for_trainer_ready": {
+          "default": true,
+          "title": "Wait For Trainer Ready",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "session_name"
+      ],
+      "title": "OnlineDaggerConfig",
+      "type": "object"
+    }
+  },
   "description": "POST /api/session body.",
   "properties": {
+    "action_filter": {
+      "$ref": "#/$defs/ActionFilterConfig",
+      "default": {
+        "enabled": true,
+        "gripper_context_s": 1.6,
+        "gripper_eps_frac": 0.01,
+        "pos_eps_m": 0.001,
+        "rail_eps_m": 0.001,
+        "rot_eps_rad": 0.001
+      }
+    },
     "arms": {
       "items": {
         "type": "string"
       },
       "title": "Arms",
       "type": "array"
+    },
+    "dataset": {
+      "anyOf": [
+        {
+          "pattern": "^(?:[A-Za-z0-9][A-Za-z0-9_\\-]*/)?[A-Za-z0-9][A-Za-z0-9_\\-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataset"
+    },
+    "dataset_resume": {
+      "default": false,
+      "title": "Dataset Resume",
+      "type": "boolean"
     },
     "digital_twin_scene": {
       "anyOf": [
@@ -45,6 +150,17 @@
       "title": "Mode",
       "type": "string"
     },
+    "online_dagger": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OnlineDaggerConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "policy": {
       "anyOf": [
         {
@@ -56,6 +172,20 @@
       ],
       "default": null,
       "title": "Policy"
+    },
+    "policy_source": {
+      "default": "checkpoint",
+      "enum": [
+        "checkpoint",
+        "external"
+      ],
+      "title": "Policy Source",
+      "type": "string"
+    },
+    "return_to_start": {
+      "default": true,
+      "title": "Return To Start",
+      "type": "boolean"
     },
     "sim_scene": {
       "anyOf": [

@@ -6,7 +6,10 @@ import json
 import subprocess
 import sys
 
-FORBIDDEN = {"mujoco", "xarm", "fastapi", "torch", "lerobot", "cv2", "mink", "zmq", "websockets"}
+FORBIDDEN = {
+    "mujoco", "xarm", "fastapi", "torch", "lerobot", "cv2", "mink", "zmq", "websockets",
+    "dora", "pyarrow",  # phase-12: the external bus stays behind the runtime's dora_bridge
+}
 
 _CHILD = """
 import importlib.util
