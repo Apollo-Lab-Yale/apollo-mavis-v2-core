@@ -279,6 +279,10 @@ def test_exported_models_cover_spec_sections():
         # row, the generic trainer_status payload and the SessionAnnounce paths block
         "OnlineDaggerConfig", "OnlineDaggerSessionInfo",
         "TrainerStatusAnnounce", "OnlineDaggerAnnounce",
+        # GELLO Manipulation (phase-15, 2026-09-09; 16-gello §8.1 / §8.4): the spec block and
+        # the /api/gello* REST models (GelloTelemetry rides TelemetryMsg $defs only)
+        "GelloSessionConfig", "GelloInfo", "GelloCalibrateRequest", "GelloCalibrateResult",
+        "GelloPreviewRequest", "GelloPreviewResult", "GelloPairInfo",
         # microphone (REST /api/microphones; phase-11)
         "MicrophoneInfo",
         # arm maintenance (REST POST /api/hardware/arms/{arm_id}/maintenance; phase-09b)
@@ -755,6 +759,7 @@ def test_session_spec_and_info_speed_scale_schema(tmp_path):
         "policy_source",  # phase-12 echo (additive)
         "fault_detail",  # 2026-09-08 (additive): the session-level notice
         "online_dagger",  # phase-14 echo (additive; 15-online-dagger §5)
+        "gello",  # phase-15 echo (additive; 16-gello §8.1)
     }
     assert info["properties"]["fault_detail"] == {
         "type": "string", "default": "", "title": "Fault Detail",
@@ -766,7 +771,7 @@ def test_session_spec_and_info_speed_scale_schema(tmp_path):
     assert info["properties"]["kind"]["enum"] == spec["properties"]["kind"]["enum"]
     assert info["properties"]["speed_scale"] == spec["properties"]["speed_scale"]
     # phase-14: the echoed Online DAgger block is the only nested model of the response.
-    assert set(info["$defs"]) == {"OnlineDaggerConfig"}
+    assert set(info["$defs"]) == {"OnlineDaggerConfig", "GelloSessionConfig"}  # + phase-15
 
 
 def test_telemetry_schema_session_bringup_rows(tmp_path):
@@ -839,7 +844,10 @@ def test_online_dagger_schemas(tmp_path):
     # (``properties`` keys are sorted in the export; field ORDER is pinned by the
     # ``model_fields`` assertions in test_protocol.py — here we pin the SET and the shapes.)
     assert {"action_filter", "return_to_start", "online_dagger"} <= set(spec["properties"])
-    assert set(spec["$defs"]) == {"ActionFilterConfig", "OnlineDaggerConfig"}
+    assert set(spec["$defs"]) == {
+        "ActionFilterConfig", "OnlineDaggerConfig",
+        "GelloSessionConfig",  # phase-15 (16-gello §8.1)
+    }
     cfg = spec["$defs"]["OnlineDaggerConfig"]
     cfg_top = json.loads((out / "OnlineDaggerConfig.json").read_text())
     assert cfg["properties"] == cfg_top["properties"]  # same class, nested and top-level
@@ -1000,6 +1008,8 @@ def test_goto_profile_args_schema(tmp_path):
     assert "$defs" not in schema
     for name in ("ActionMsg", "AckMsg"):
         enum = json.loads((out / f"{name}.json").read_text())["properties"]["name"]["enum"]
-        assert enum[-1] == "goto_profile" and enum[-4:-1] == ["takeover", "handback", "train_now"]
+        # phase-15 appended gello_pause / gello_resume after goto_profile (16-gello §8.2)
+        assert enum[-6:] == ["takeover", "handback", "train_now", "goto_profile",
+                             "gello_pause", "gello_resume"]
     index = json.loads((out / "index.json").read_text())
     assert "GotoProfileArgs" in index["models"]

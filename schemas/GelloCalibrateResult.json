@@ -1,0 +1,58 @@
+{
+  "description": "``POST /api/gello/calibrate`` response: the calibration now in force (all None after\n``clear``).",
+  "properties": {
+    "detail": {
+      "default": "",
+      "title": "Detail",
+      "type": "string"
+    },
+    "gripper_closed_rad": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gripper Closed Rad"
+    },
+    "gripper_open_rad": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gripper Open Rad"
+    },
+    "joint_offsets_rad": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Joint Offsets Rad"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ok"
+  ],
+  "title": "GelloCalibrateResult",
+  "type": "object"
+}

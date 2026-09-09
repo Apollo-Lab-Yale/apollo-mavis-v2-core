@@ -12,6 +12,11 @@ from pydantic import BaseModel, Field
 
 from apollo_mavis_v2_core.dagger.types import ControlMode, TrainerStatus
 from apollo_mavis_v2_core.protocol.external import ExternalStatus, TrainerStatusAnnounce
+from apollo_mavis_v2_core.protocol.gello import (
+    GelloDeviceTelemetry,
+    GelloState,
+    GelloViewpointMode,
+)
 from apollo_mavis_v2_core.protocol.hardware_monitor import HardwareMonitorTelemetry
 from apollo_mavis_v2_core.protocol.microphone import MicStatus
 from apollo_mavis_v2_core.schemas.safety import CollisionReport
@@ -331,6 +336,54 @@ class MicrophoneTelemetry(BaseModel):
     overruns: int = 0  # backend overrun / dropped-block count since start
 
 
+class GelloViewpointTelemetry(BaseModel):
+    """``GelloTelemetry.viewpoint`` (16-gello §7 / §8.3; phase-15): how the Perception Arm
+    is being driven in the gello session. ``mode`` echoes ``GelloSessionConfig.viewpoint``;
+    ``attached`` = an external viewpoint node's ``ExternalPolicySource`` is live for the
+    view block right now (else the arm holds the GELLO hold posture); ``policy_id`` names
+    it; ``detail`` is the operator-facing line ("external node <id> attached", "holding
+    the GELLO posture", "waiting for a node", or why a spec was judged incompatible)."""
+
+    mode: GelloViewpointMode
+    attached: bool
+    policy_id: str | None = None
+    detail: str = ""
+    # 2026-09-09 review: the source can be PAUSED by the loop's three-strike NaN guard while
+    # ``attached`` stays True (the node is live, its actions are ignored, the arm holds);
+    # ``gello_resume`` lifts it. Without this flag the Cockpit showed "attached" over a
+    # holding arm and disabled Resume while the follower tracked.
+    paused: bool = False
+
+
+class GelloTelemetry(GelloDeviceTelemetry):
+    """``TelemetryMsg.gello`` (16-gello §8.3; phase-15, 2026-09-09), additive.
+
+    The device half (``backend`` .. ``joint_signs``) is :class:`GelloDeviceTelemetry`
+    (``protocol.gello``; shared with ``GET /api/gello``) and is populated whenever the
+    reader runs, session or not. The session half below is ``None`` / ``""`` without a
+    gello session: ``state`` is the engagement state machine (``GelloState``; only
+    ``tracking`` follows the leader, everything else holds the last command),
+    ``state_detail`` the operator-facing reason ("leader 0.31 rad from the arm - move
+    GELLO within 0.10 rad", "paused by operator", "planned motion"), ``lag_rad`` the
+    per-joint ``unwrap(leader) - measured`` (the OUT OF SYNC panel's bars) and
+    ``max_lag_rad`` its Chebyshev norm, ``engaged_arm`` the Manipulation Arm's id while
+    tracking, ``viewpoint`` the Perception Arm's source.
+    """
+
+    # session half (None without a gello session)
+    state: GelloState | None = None
+    state_detail: str = ""
+    lag_rad: list[float] | None = None  # unwrap(leader) - measured, per joint (7)
+    max_lag_rad: float | None = None  # max |lag_rad|
+    engaged_arm: str | None = None  # "grip" while tracking
+    viewpoint: GelloViewpointTelemetry | None = None
+    # 2026-09-09 review: a pause requested (or forced) while a planned motion owns the arm is
+    # LATCHED — the display stays ``motion`` and turns ``paused`` when the window closes. The
+    # Cockpit needs the latch to label the motion window ("motion - pause latched") and to keep
+    # Pause / Resume honest; None without a gello session.
+    paused_latched: bool | None = None
+
+
 class TelemetryMsg(BaseModel):
     """One 25 Hz telemetry frame."""
 
@@ -352,6 +405,9 @@ class TelemetryMsg(BaseModel):
     external: ExternalStatus | None = None  # additive (phase-12): dora bridge + external policy
     hardware_monitor: HardwareMonitorTelemetry | None = None  # additive (phase-09a)
     datasets: DatasetsTelemetry | None = None  # additive (2026-09-07): export job progress
+    gello: GelloTelemetry | None = None  # additive (phase-15, 2026-09-09; 16-gello §8.3): the
+    #   GELLO leader (device half, session-less like tracker / microphone) + the engagement
+    #   state of a gello session; None when the runtime has no reader. Appended LAST
 
 
 __all__ = [
@@ -370,5 +426,7 @@ __all__ = [
     "ControllerTelemetry",
     "TrackerTelemetry",
     "MicrophoneTelemetry",
+    "GelloViewpointTelemetry",
+    "GelloTelemetry",
     "TelemetryMsg",
 ]

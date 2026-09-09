@@ -1,0 +1,18 @@
+{
+  "additionalProperties": false,
+  "description": "GELLO session parameters (16-gello \u00a78.1 / D1; phase-15, 2026-09-09).\n\n``SessionSpec.gello`` \u2014 non-null iff ``mode == \"gello\"``. The block carries the ONE\nchoice the operator makes for the Perception Arm: ``viewpoint`` says whether an\nexternal dora node may drive it (``auto`` = attach whenever a compatible\n``policy_spec`` is fresh, hold otherwise \u2014 the default; ``external`` = the node must\nbe attached at launch, 409 otherwise; ``hold`` = ignore the bus and hold the GELLO\nhold posture). Everything about the leader itself (port, baud, signs, offsets,\ntolerances) is runtime config (``RuntimeConfig.gello``, 16-gello \u00a79.1), not a\nper-session field, and GELLO records nothing in v1.\n\n``extra=\"forbid\"`` like ``OnlineDaggerConfig``: an unknown key is a 422 at POST, never\nsilently dropped.",
+  "properties": {
+    "viewpoint": {
+      "default": "auto",
+      "enum": [
+        "auto",
+        "external",
+        "hold"
+      ],
+      "title": "Viewpoint",
+      "type": "string"
+    }
+  },
+  "title": "GelloSessionConfig",
+  "type": "object"
+}

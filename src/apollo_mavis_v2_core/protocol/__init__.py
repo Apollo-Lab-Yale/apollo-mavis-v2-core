@@ -37,6 +37,21 @@ from .external import (
     SessionAnnounce,
     TrainerStatusAnnounce,
 )
+from .gello import (
+    GelloBackend,
+    GelloCalibrateOp,
+    GelloCalibrateRequest,
+    GelloCalibrateResult,
+    GelloDeviceStatus,
+    GelloDeviceTelemetry,
+    GelloInfo,
+    GelloPairInfo,
+    GelloPreviewRequest,
+    GelloPreviewResult,
+    GelloPreviewStatus,
+    GelloState,
+    GelloViewpointMode,
+)
 from .hardware_monitor import (
     ArmMonitorStatus,
     ArmMonitorTelemetry,
@@ -77,6 +92,7 @@ from .session import (
     DatasetLayoutInfo,
     DatasetNamespaceInfo,
     EpisodeInfo,
+    GelloSessionConfig,
     Mode,
     OnlineDaggerConfig,
     OnlineDaggerSessionInfo,
@@ -97,6 +113,8 @@ from .telemetry import (
     DatasetExportTelemetry,
     DatasetsTelemetry,
     EpisodeStatus,
+    GelloTelemetry,
+    GelloViewpointTelemetry,
     InferenceStatus,
     MicrophoneTelemetry,
     OnlineDaggerStatus,
@@ -162,6 +180,8 @@ __all__ = [
     "ControllerTelemetry",
     "TrackerTelemetry",
     "MicrophoneTelemetry",
+    "GelloViewpointTelemetry",  # phase-15 (16-gello §8.3)
+    "GelloTelemetry",
     "TelemetryMsg",
     # tracker calibration
     "CalibrationKind",
@@ -197,6 +217,22 @@ __all__ = [
     "OnlineDaggerSessionInfo",
     "DatasetLayoutInfo",
     "DatasetNamespaceInfo",
+    # GELLO Manipulation (phase-15, 2026-09-09; 16-gello §8): the SessionSpec block, the
+    # shared literals + device half (protocol.gello) and the /api/gello* REST models
+    "GelloSessionConfig",
+    "GelloBackend",
+    "GelloDeviceStatus",
+    "GelloState",
+    "GelloViewpointMode",
+    "GelloCalibrateOp",
+    "GelloPreviewStatus",
+    "GelloDeviceTelemetry",
+    "GelloInfo",
+    "GelloCalibrateRequest",
+    "GelloCalibrateResult",
+    "GelloPreviewRequest",
+    "GelloPairInfo",
+    "GelloPreviewResult",
     # microphone (phase-11)
     "MicStatus",
     "MicrophoneInfo",

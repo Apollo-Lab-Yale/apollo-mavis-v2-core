@@ -20,6 +20,11 @@ Phase-14 (15-online-dagger §6) adds the Online DAgger trainer contract: the gen
 ``SessionAnnounce.online_dagger`` and the ``train_now`` event. History: the v1.0
 PRO-DAgger shell superseded 2026-09-08 carried algorithm-specific payloads here;
 none of it shipped and none of it survives — the runtime is algorithm-agnostic.
+
+Phase-15 (16-gello §7 / D5, 2026-09-09) adds ``SessionAnnounce.external_arms`` (appended
+last): the arms a session accepts ``policy_action`` for — ``["view"]`` in a gello session,
+where an external viewpoint node drives the Perception Arm only. ``EVENT_KINDS``,
+``RUNTIME_INPUTS``, ``POLICY_OUTPUTS`` and ``MAVIS_SCHEMA`` are unchanged.
 """
 
 from __future__ import annotations
@@ -280,6 +285,15 @@ class SessionAnnounce(BaseModel):
     deprecated_keys: list[str] = []
     online_dagger: OnlineDaggerAnnounce | None = None  # phase-14 (15-online-dagger §6):
     #   non-null iff spec.online_dagger is set; appended last (additive)
+    # phase-15 (16-gello §7 / D5; 2026-09-09): the arms this session accepts ``policy_action``
+    # for. EMPTY = every session arm (today's behaviour: dagger / inference sessions, and a
+    # gello session with ``viewpoint: hold``, which ignores the bus). A gello session with
+    # ``viewpoint`` auto / external announces ``["view"]`` — the external viewpoint node drives
+    # the Perception Arm ONLY and ``action_names`` / ``state_names`` carry the view block
+    # only, while ``arm_ids`` still lists both arms (obs_state carries both arms' state).
+    # Nothing can move the Manipulation Arm over the bus. Appended LAST (additive; both
+    # contract goldens pin the order).
+    external_arms: list[str] = Field(default_factory=list)
 
 
 class PolicySpecAnnounce(BaseModel):

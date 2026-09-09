@@ -11,9 +11,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from apollo_mavis_v2_core.protocol.gello import GelloViewpointMode
 from apollo_mavis_v2_core.types import FrameRef, parse_frame
 
-Mode = Literal["teleop", "collect", "dagger", "inference"]
+# ``gello`` (phase-15, 2026-09-09; 16-gello §0 item 1 / D1): the passive GELLO leader arm
+# drives the Manipulation Arm in joint space, the Perception Arm follows an external
+# viewpoint node or holds its GELLO posture. Appended LAST (additive; the UI's MODES pins
+# the order).
+Mode = Literal["teleop", "collect", "dagger", "inference", "gello"]
 
 START_FROM_RE = r"^(keep_current|profile:[A-Za-z0-9_\-]+)$"
 _START_FROM_PATTERN = re.compile(START_FROM_RE)
@@ -78,6 +83,27 @@ class OnlineDaggerConfig(BaseModel):
     #   ``ready`` once for THIS session (15-online-dagger D2)
 
 
+class GelloSessionConfig(BaseModel):
+    """GELLO session parameters (16-gello §8.1 / D1; phase-15, 2026-09-09).
+
+    ``SessionSpec.gello`` — non-null iff ``mode == "gello"``. The block carries the ONE
+    choice the operator makes for the Perception Arm: ``viewpoint`` says whether an
+    external dora node may drive it (``auto`` = attach whenever a compatible
+    ``policy_spec`` is fresh, hold otherwise — the default; ``external`` = the node must
+    be attached at launch, 409 otherwise; ``hold`` = ignore the bus and hold the GELLO
+    hold posture). Everything about the leader itself (port, baud, signs, offsets,
+    tolerances) is runtime config (``RuntimeConfig.gello``, 16-gello §9.1), not a
+    per-session field, and GELLO records nothing in v1.
+
+    ``extra="forbid"`` like ``OnlineDaggerConfig``: an unknown key is a 422 at POST, never
+    silently dropped.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    viewpoint: GelloViewpointMode = "auto"
+
+
 class SessionSpec(BaseModel):
     """POST /api/session body."""
 
@@ -125,6 +151,14 @@ class SessionSpec(BaseModel):
     # ``dataset_resume`` must stay unset because the rollouts repo id is DERIVED
     # (``online_dagger/<session_name>``, resumed iff ``online_dagger.resume``).
     online_dagger: OnlineDaggerConfig | None = None
+    # GELLO Manipulation (additive, phase-15 2026-09-09; 16-gello §8.1 / D1): non-null iff
+    # ``mode == "gello"``. A gello session takes no ``task`` / ``dataset`` / ``policy`` /
+    # ``online_dagger``, keeps ``policy_source`` at ``checkpoint`` (the ``viewpoint`` field,
+    # not ``policy_source``, says whether an external node drives the Perception Arm),
+    # only the default ``return_to_start`` / ``action_filter``, and ``start_from`` must be
+    # ``keep_current`` — the launch motion IS the GELLO posture (planned, one arm at a
+    # time). Appended LAST.
+    gello: GelloSessionConfig | None = None
 
     @field_validator("start_from")
     @classmethod
@@ -151,6 +185,33 @@ class SessionSpec(BaseModel):
                 raise ValueError(f"frames[{arm_id!r}] may not be an ee: frame: {ref!r}")
         if self.mode in ("collect", "dagger") and not self.task:
             raise ValueError(f"mode {self.mode!r} requires a task string")
+        # GELLO (16-gello §8.1; phase-15): evaluated BEFORE the generic mode rules below so a
+        # gello body gets the specific message (the online_dagger precedent). The generic
+        # rules still hold for gello — ``return_to_start`` / ``action_filter`` must stay at
+        # their defaults ("... is a collect / dagger-mode field").
+        if self.mode == "gello":
+            if self.gello is None:
+                raise ValueError("mode 'gello' requires a gello block")
+            if self.start_from != "keep_current":
+                raise ValueError(
+                    "mode 'gello' requires start_from 'keep_current' (the launch motion "
+                    "is the GELLO posture)"
+                )
+            if self.task is not None:
+                raise ValueError("mode 'gello' takes no task")
+            if self.dataset is not None or self.dataset_resume:
+                raise ValueError("mode 'gello' takes no dataset (GELLO records nothing in v1)")
+            if self.policy is not None:
+                raise ValueError("mode 'gello' takes no policy checkpoint: policy must be null")
+            if self.online_dagger is not None:
+                raise ValueError("mode 'gello' takes no online_dagger block")
+            if self.policy_source != "checkpoint":
+                raise ValueError(
+                    "mode 'gello' requires policy_source 'checkpoint' (gello.viewpoint says "
+                    "whether an external node drives the Perception Arm)"
+                )
+        elif self.gello is not None:
+            raise ValueError("gello is a gello-mode field")
         if self.online_dagger is not None:  # 15-online-dagger §5 (checked before the
             #   dataset rule so a dagger body with both gets the specific message)
             if self.mode != "dagger":
@@ -201,6 +262,8 @@ class SessionInfo(BaseModel):
     #   "" = nothing to say
     online_dagger: OnlineDaggerConfig | None = None  # additive (phase-14, 15-online-dagger
     #   §5): echo of SessionSpec.online_dagger; None for every other session
+    gello: GelloSessionConfig | None = None  # additive (phase-15, 2026-09-09; 16-gello §8.1):
+    #   echo of SessionSpec.gello; None for every other session. Appended LAST
 
 
 class ArmStatusInfo(BaseModel):
@@ -426,6 +489,7 @@ __all__ = [
     "SLUG_RE",
     "ActionFilterConfig",
     "OnlineDaggerConfig",
+    "GelloSessionConfig",
     "DatasetInfo",
     "DatasetExportInfo",
     "DatasetExportRequest",

@@ -1,5 +1,23 @@
 {
   "$defs": {
+    "GelloSessionConfig": {
+      "additionalProperties": false,
+      "description": "GELLO session parameters (16-gello \u00a78.1 / D1; phase-15, 2026-09-09).\n\n``SessionSpec.gello`` \u2014 non-null iff ``mode == \"gello\"``. The block carries the ONE\nchoice the operator makes for the Perception Arm: ``viewpoint`` says whether an\nexternal dora node may drive it (``auto`` = attach whenever a compatible\n``policy_spec`` is fresh, hold otherwise \u2014 the default; ``external`` = the node must\nbe attached at launch, 409 otherwise; ``hold`` = ignore the bus and hold the GELLO\nhold posture). Everything about the leader itself (port, baud, signs, offsets,\ntolerances) is runtime config (``RuntimeConfig.gello``, 16-gello \u00a79.1), not a\nper-session field, and GELLO records nothing in v1.\n\n``extra=\"forbid\"`` like ``OnlineDaggerConfig``: an unknown key is a 422 at POST, never\nsilently dropped.",
+      "properties": {
+        "viewpoint": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "external",
+            "hold"
+          ],
+          "title": "Viewpoint",
+          "type": "string"
+        }
+      },
+      "title": "GelloSessionConfig",
+      "type": "object"
+    },
     "OnlineDaggerConfig": {
       "additionalProperties": false,
       "description": "Online DAgger session parameters (15-online-dagger \u00a75; phase-14, 2026-09-08).\n\nThe runtime is the algorithm-agnostic SHELL (operator decision 2026-09-08): it\nperforms rollouts, exposes take-over / hand-back, labels every step novice /\nexpert, saves the kept rollouts and reports what the trainer says. Which DAgger\nvariant runs, its hyper-parameters and every training artefact belong to the\ntrainer node in the policy repo, so this block carries NO algorithm settings\n\u2014 only what the shell itself needs: the session directory name, whether an\nexisting one is continued, and the two generic gates on ``episode_new``.\n\n``extra=\"forbid\"``: an unknown key is a 422 at POST, never silently dropped \u2014\na hyper-parameter typed here by mistake would otherwise vanish while the\noperator believes it travelled (the trainer configures itself; the runtime\nnever forwards hyper-parameters).",
@@ -51,6 +69,17 @@
       "title": "Fault Detail",
       "type": "string"
     },
+    "gello": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/GelloSessionConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "kind": {
       "default": "sim",
       "enum": [
@@ -65,7 +94,8 @@
         "teleop",
         "collect",
         "dagger",
-        "inference"
+        "inference",
+        "gello"
       ],
       "title": "Mode",
       "type": "string"
