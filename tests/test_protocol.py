@@ -68,6 +68,7 @@ from apollo_mavis_v2_core.protocol.telemetry import (
     MicrophoneTelemetry,
     OnlineDaggerStatus,
     PoseMsg,
+    SessionAutoEndNotice,
     SessionTelemetry,
     TelemetryMsg,
     TrackerSettingsMsg,
@@ -1873,10 +1874,34 @@ def test_arm_bringup_telemetry_pinned_and_session_bringup_additive():
     with pytest.raises(ValidationError):
         ArmBringupTelemetry(arm_id="grip", status="ok")  # step required
     assert set(SessionTelemetry.model_fields) == {
-        "state", "start_from_progress", "plan_status", "trainer_alive", "bringup",
-        "translate_frame",  # additive 2026-09-08 (04-runtime §6)
-        "fault_detail",  # additive 2026-09-08 (04-runtime §13.3): session-level notice
+        "state",
+        "start_from_progress",
+        "plan_status",
+        "trainer_alive",
+        "bringup",
+        "translate_frame",
+        "fault_detail",
+        # 2026-09-09 evening (orphaned-session watch): the live session's identity for the
+        # Welcome page + the runtime's notice when it ended a session on its own
+        "session_id",
+        "mode",
+        "kind",
+        "auto_ended",
     }
+    idle = SessionTelemetry(state="idle")
+    assert (idle.session_id, idle.mode, idle.kind, idle.auto_ended) == (None, None, None, None)
+    assert set(SessionAutoEndNotice.model_fields) == {
+        "session_id", "mode", "kind", "ended_at", "reason",
+    }
+    assert all(f.is_required() for f in SessionAutoEndNotice.model_fields.values())
+    ended = SessionTelemetry(
+        state="idle",
+        auto_ended=SessionAutoEndNotice(
+            session_id="abc", mode="teleop", kind="hardware",
+            ended_at="2026-09-09T23:16:37+00:00", reason="no controller connected for 15 s",
+        ),
+    )
+    assert json.loads(ended.model_dump_json())["auto_ended"]["reason"].startswith("no controller")
     assert SessionTelemetry(state="running").bringup is None
     # The manager's session-level notice (a refused start_from, a Go-to-profile outcome):
     # additive, "" by default, a pre-2026-09-08 frame without it still parses.

@@ -177,10 +177,37 @@ class ArmBringupTelemetry(BaseModel):
     detail: str = ""  # human-readable outcome / reason
 
 
+class SessionAutoEndNotice(BaseModel):
+    """Why the LAST session ended WITHOUT the operator's click (additive, 2026-09-09
+    evening; 04-runtime §13.2 "orphaned session", §13.3).
+
+    Filled by the runtime when it ends a session on its own - today only the
+    orphaned-session watch: the last controller ``/ws/control`` connection was
+    gone for ``control.orphan_session_grace_s`` (the Cockpit tab was closed,
+    reloaded for good or navigated back to the Welcome page) - and cleared when
+    the next session starts. The end is the DELETE teardown: the arms stop and
+    brake where they are, no motion. ``None`` = the last session ended by DELETE /
+    never ran. The Welcome page shows it verbatim so the operator learns that the
+    arms were released while nobody was watching."""
+
+    session_id: str
+    mode: str  # SessionSpec.mode of the session that ended
+    kind: str  # "hardware" | "sim"
+    ended_at: str  # ISO-8601 wall clock
+    reason: str  # operator-facing, e.g. "no controller connected for 15 s"
+
+
 class SessionTelemetry(BaseModel):
     """Additive session-lifecycle block (04-runtime §13.3)."""
 
     state: str  # SessionState value
+    session_id: str | None = None  # additive (2026-09-09): the live session's id; None = no session
+    mode: str | None = None  # additive (2026-09-09): SessionSpec.mode of the live session
+    kind: str | None = None  # additive (2026-09-09): "hardware" | "sim" of the live session
+    #   The Welcome page never opens /ws/control and its SessionInfo store is empty on
+    #   a fresh load, so these three are how it learns that a session is running and
+    #   which Cockpit route (/<mode>) to offer instead of a disabled launcher.
+    auto_ended: SessionAutoEndNotice | None = None  # additive (2026-09-09): see the model
     start_from_progress: float | None = None  # 0-1 during START_FROM
     plan_status: str | None = None
     trainer_alive: bool | None = None
@@ -356,6 +383,7 @@ class TelemetryMsg(BaseModel):
 
 __all__ = [
     "PoseMsg",
+    "SessionAutoEndNotice",
     "ArmTelemetry",
     "ClearanceItem",
     "EpisodeStatus",

@@ -1526,9 +1526,54 @@
       "title": "PoseMsg",
       "type": "object"
     },
+    "SessionAutoEndNotice": {
+      "description": "Why the LAST session ended WITHOUT the operator's click (additive, 2026-09-09\nevening; 04-runtime \u00a713.2 \"orphaned session\", \u00a713.3).\n\nFilled by the runtime when it ends a session on its own - today only the\norphaned-session watch: the last controller ``/ws/control`` connection was\ngone for ``control.orphan_session_grace_s`` (the Cockpit tab was closed,\nreloaded for good or navigated back to the Welcome page) - and cleared when\nthe next session starts. The end is the DELETE teardown: the arms stop and\nbrake where they are, no motion. ``None`` = the last session ended by DELETE /\nnever ran. The Welcome page shows it verbatim so the operator learns that the\narms were released while nobody was watching.",
+      "properties": {
+        "ended_at": {
+          "title": "Ended At",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "mode": {
+          "title": "Mode",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "mode",
+        "kind",
+        "ended_at",
+        "reason"
+      ],
+      "title": "SessionAutoEndNotice",
+      "type": "object"
+    },
     "SessionTelemetry": {
       "description": "Additive session-lifecycle block (04-runtime \u00a713.3).",
       "properties": {
+        "auto_ended": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionAutoEndNotice"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "bringup": {
           "anyOf": [
             {
@@ -1549,6 +1594,30 @@
           "title": "Fault Detail",
           "type": "string"
         },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
         "plan_status": {
           "anyOf": [
             {
@@ -1560,6 +1629,18 @@
           ],
           "default": null,
           "title": "Plan Status"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
         },
         "start_from_progress": {
           "anyOf": [

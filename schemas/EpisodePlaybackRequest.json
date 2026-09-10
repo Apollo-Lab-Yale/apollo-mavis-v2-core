@@ -1,0 +1,31 @@
+{
+  "description": "``POST /api/session/playback`` body (2026-09-10).\n\n``goto_initial`` walks the arms to the episode's first frame and is SYNCHRONOUS,\nlike ``return_home``: the dialog awaits it and only then enables **Playback**, which\nis the operator's rule \u2014 you cannot replay a trajectory from the wrong place.\n``play`` streams the recorded trajectory through the same twin-planned, gated\nexecutor; ``stop`` cancels whatever is in flight.",
+  "properties": {
+    "action": {
+      "enum": [
+        "goto_initial",
+        "play",
+        "stop"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "episode_id": {
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z.\\-]*$",
+      "title": "Episode Id",
+      "type": "string"
+    },
+    "repo_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_\\-]*/[A-Za-z0-9][A-Za-z0-9_\\-]*$",
+      "title": "Repo Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "repo_id",
+    "episode_id",
+    "action"
+  ],
+  "title": "EpisodePlaybackRequest",
+  "type": "object"
+}

@@ -1,0 +1,100 @@
+{
+  "$defs": {
+    "EpisodePlaybackArm": {
+      "description": "One arm's state at an episode's FIRST recorded frame (2026-09-10).\n\nRead out of ``frames.parquet``'s ``observation.state`` row 0 by the per-dim names\nthe dataset's own manifest carries (10-frames \u00a76.1 / \u00a77), so an episode recorded\nwith a different arm set or without a track still reads correctly.",
+      "properties": {
+        "arm_id": {
+          "title": "Arm Id",
+          "type": "string"
+        },
+        "gripper_open_frac": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gripper Open Frac"
+        },
+        "q": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Q",
+          "type": "array"
+        },
+        "rail_pos_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rail Pos M"
+        }
+      },
+      "required": [
+        "arm_id",
+        "q"
+      ],
+      "title": "EpisodePlaybackArm",
+      "type": "object"
+    }
+  },
+  "description": "``GET /api/datasets/{ns}/{name}/episodes/{id}/playback`` (2026-09-10; operator\nrequest: a **Playback** button on every episode row of the Welcome page's Datasets\npanel, 05-ui \u00a78.1 item 7).\n\nWhat a playback of this episode WOULD do, read from the episode directory only \u2014 no\nsession needed, so the dialog can open and explain itself before anything moves. The\ntwo motion buttons ride ``POST /api/session/playback`` and do need one.\n\n``playable`` false + ``reason`` covers every case the runtime would refuse: no\nsession, a session whose arms or workcell kind do not match the recording, a legacy\ntree, an episode whose parquet is missing or unreadable. The UI shows ``reason``\nverbatim instead of letting the operator meet a 409.",
+  "properties": {
+    "arms": {
+      "items": {
+        "$ref": "#/$defs/EpisodePlaybackArm"
+      },
+      "title": "Arms",
+      "type": "array"
+    },
+    "duration_s": {
+      "title": "Duration S",
+      "type": "number"
+    },
+    "episode_id": {
+      "title": "Episode Id",
+      "type": "string"
+    },
+    "fps": {
+      "title": "Fps",
+      "type": "number"
+    },
+    "frames": {
+      "title": "Frames",
+      "type": "integer"
+    },
+    "playable": {
+      "title": "Playable",
+      "type": "boolean"
+    },
+    "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+    },
+    "repo_id": {
+      "title": "Repo Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "repo_id",
+    "episode_id",
+    "frames",
+    "fps",
+    "duration_s",
+    "arms",
+    "playable"
+  ],
+  "title": "EpisodePlaybackInfo",
+  "type": "object"
+}

@@ -69,6 +69,9 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     # datasets (§12; REST /api/datasets — 2026-09-07 data collection)
     "DatasetInfo": session.DatasetInfo,
     "EpisodeInfo": session.EpisodeInfo,
+    # Episode playback (2026-09-10; 04-runtime §13.1, 05-ui §8.1 item 7)
+    "EpisodePlaybackInfo": session.EpisodePlaybackInfo,
+    "EpisodePlaybackRequest": session.EpisodePlaybackRequest,
     "DatasetExportInfo": session.DatasetExportInfo,
     "DatasetExportRequest": session.DatasetExportRequest,
     # dataset layout (§12; REST GET /api/datasets/layout — phase-14, 15-online-dagger §7)

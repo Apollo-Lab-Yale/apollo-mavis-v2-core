@@ -340,6 +340,73 @@ class EpisodeInfo(BaseModel):
     open: bool = False  # currently being recorded (delete -> 409)
 
 
+class EpisodePlaybackArm(BaseModel):
+    """One arm's state at an episode's FIRST recorded frame (2026-09-10).
+
+    Read out of ``frames.parquet``'s ``observation.state`` row 0 by the per-dim names
+    the dataset's own manifest carries (10-frames §6.1 / §7), so an episode recorded
+    with a different arm set or without a track still reads correctly.
+    """
+
+    arm_id: str
+    q: list[float]  # the 7 joint angles, rad (the rail is NOT in here)
+    rail_pos_m: float | None = None  # None = this arm has no track in the recording
+    gripper_open_frac: float | None = None  # None = no gripper column (Perception Arm)
+
+
+class EpisodePlaybackInfo(BaseModel):
+    """``GET /api/datasets/{ns}/{name}/episodes/{id}/playback`` (2026-09-10; operator
+    request: a **Playback** button on every episode row of the Welcome page's Datasets
+    panel, 05-ui §8.1 item 7).
+
+    What a playback of this episode WOULD do, read from the episode directory only — no
+    session needed, so the dialog can open and explain itself before anything moves. The
+    two motion buttons ride ``POST /api/session/playback`` and do need one.
+
+    ``playable`` false + ``reason`` covers every case the runtime would refuse: no
+    session, a session whose arms or workcell kind do not match the recording, a legacy
+    tree, an episode whose parquet is missing or unreadable. The UI shows ``reason``
+    verbatim instead of letting the operator meet a 409.
+    """
+
+    repo_id: str
+    episode_id: str
+    frames: int
+    fps: float
+    duration_s: float
+    arms: list[EpisodePlaybackArm]  # the INITIAL state, one row per recorded arm
+    playable: bool
+    reason: str = ""  # operator-facing; "" when playable
+
+
+class EpisodePlaybackRequest(BaseModel):
+    """``POST /api/session/playback`` body (2026-09-10).
+
+    ``goto_initial`` walks the arms to the episode's first frame and is SYNCHRONOUS,
+    like ``return_home``: the dialog awaits it and only then enables **Playback**, which
+    is the operator's rule — you cannot replay a trajectory from the wrong place.
+    ``play`` streams the recorded trajectory through the same twin-planned, gated
+    executor; ``stop`` cancels whatever is in flight.
+    """
+
+    repo_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_\-]*/[A-Za-z0-9][A-Za-z0-9_\-]*$")
+    #   `<ns>/<name>`, the repo-id grammar of 10-frames §11 — validated HERE and not only
+    #   in the path routes, because this one arrives in a JSON body and is joined onto a
+    #   filesystem root: no empty segment, no `.`, no `..`, no third slash.
+    episode_id: str = Field(pattern=r"^[0-9A-Za-z][0-9A-Za-z.\-]*$")
+    #   A capture-time stamp (10-frames §11.3, `20260907T141203.512Z-3f9a1c`): the `.` and
+    #   `Z` travel verbatim, but it must start with an alphanumeric so no `..` or `.hidden`
+    #   can reach the directory join.
+    action: Literal["goto_initial", "play", "stop"]
+
+    @field_validator("episode_id")
+    @classmethod
+    def _no_traversal(cls, v: str) -> str:
+        if ".." in v:
+            raise ValueError("episode_id must not contain '..'")
+        return v
+
+
 class DatasetExportRequest(BaseModel):
     """``POST /api/datasets/{ns}/{name}/export`` body (04-runtime §13.1)."""
 

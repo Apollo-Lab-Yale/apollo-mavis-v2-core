@@ -273,6 +273,9 @@ def test_exported_models_cover_spec_sections():
         "ReturnHomeResult",
         # datasets (REST /api/datasets; 2026-09-07 data collection)
         "DatasetInfo", "EpisodeInfo", "DatasetExportInfo", "DatasetExportRequest",
+        # episode playback (2026-09-10; operator request, 04-runtime §10.8, 05-ui §8.1
+        # item 7): the dialog reads Info before anything moves, Request carries the action
+        "EpisodePlaybackInfo", "EpisodePlaybackRequest",
         # dataset layout (REST GET /api/datasets/layout; phase-14, 15-online-dagger §7)
         "DatasetLayoutInfo", "DatasetNamespaceInfo",
         # Online DAgger (phase-14; 15-online-dagger §5-§7): the spec block, the sessions
@@ -781,7 +784,15 @@ def test_telemetry_schema_session_bringup_rows(tmp_path):
         "state", "start_from_progress", "plan_status", "trainer_alive", "bringup",
         "translate_frame",  # additive 2026-09-08 (04-runtime §6)
         "fault_detail",  # additive 2026-09-08 (04-runtime §13.3): session-level notice
+        # additive 2026-09-09 evening (04-runtime §13.2 orphaned session / §13.3): the live
+        # session's identity for the Welcome page + the runtime's auto-end notice
+        "session_id", "mode", "kind", "auto_ended",
     }
+    assert "SessionAutoEndNotice" in telemetry["$defs"]
+    notice = telemetry["$defs"]["SessionAutoEndNotice"]
+    assert set(notice["required"]) == {"session_id", "mode", "kind", "ended_at", "reason"}
+    assert session["properties"]["auto_ended"]["default"] is None
+    assert {"$ref": "#/$defs/SessionAutoEndNotice"} in session["properties"]["auto_ended"]["anyOf"]
     assert session["properties"]["fault_detail"] == {
         "type": "string", "default": "", "title": "Fault Detail",
     }
