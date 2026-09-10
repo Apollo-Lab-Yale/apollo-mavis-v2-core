@@ -38,15 +38,6 @@ ActionName = Literal[
     # return-to-initial — never implicit. No key binding (not in KEYMAP — the keymap is
     # operator-owned).
     "goto_profile",
-    # phase-15 (16-gello D3 / D9 / §8.2; 2026-09-09): the GELLO Manipulation session's two
-    # Cockpit buttons. Pause stops the follower from following the leader (state ``paused``,
-    # the last command is HELD — never a move); Resume re-runs the engage rule (within
-    # ``engage_tol_rad`` -> ``tracking``, else ``out_of_sync``). Both idempotent (a no-op ack
-    # when already in that state), argless, NO key binding (not in KEYMAP — the keymap is
-    # operator-owned; 16-gello §16 item 3), nacked "not a GELLO Manipulation session"
-    # elsewhere (the base ControlLoop handler; 2026-09-09 review).
-    "gello_pause",
-    "gello_resume",
 ]
 
 
@@ -205,9 +196,8 @@ def validate_action_args(msg: ActionMsg) -> BaseModel | None:
 
     Returns the parsed args model for switch_arm / joint_target /
     save_profile / set_initial_condition / tracker_settings / goto_profile;
-    for every other action (incl. switch_arm_prev, takeover, handback,
-    train_now, gello_pause and gello_resume), requires ``args == {}`` and
-    returns None.
+    for every other action (incl. switch_arm_prev, takeover, handback and
+    train_now), requires ``args == {}`` and returns None.
     Every field of ``SwitchArmArgs`` is optional, so the keyboard / gamepad
     ``switch_arm`` with no args still validates and still cycles.
     Raises pydantic ``ValidationError`` / ``ValueError``.

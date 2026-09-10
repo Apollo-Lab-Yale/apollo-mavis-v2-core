@@ -139,24 +139,6 @@
       "title": "CameraAnnounce",
       "type": "object"
     },
-    "GelloSessionConfig": {
-      "additionalProperties": false,
-      "description": "GELLO session parameters (16-gello \u00a78.1 / D1; phase-15, 2026-09-09).\n\n``SessionSpec.gello`` \u2014 non-null iff ``mode == \"gello\"``. The block carries the ONE\nchoice the operator makes for the Perception Arm: ``viewpoint`` says whether an\nexternal dora node may drive it (``auto`` = attach whenever a compatible\n``policy_spec`` is fresh, hold otherwise \u2014 the default; ``external`` = the node must\nbe attached at launch, 409 otherwise; ``hold`` = ignore the bus and hold the GELLO\nhold posture). Everything about the leader itself (port, baud, signs, offsets,\ntolerances) is runtime config (``RuntimeConfig.gello``, 16-gello \u00a79.1), not a\nper-session field, and GELLO records nothing in v1.\n\n``extra=\"forbid\"`` like ``OnlineDaggerConfig``: an unknown key is a 422 at POST, never\nsilently dropped.",
-      "properties": {
-        "viewpoint": {
-          "default": "auto",
-          "enum": [
-            "auto",
-            "external",
-            "hold"
-          ],
-          "title": "Viewpoint",
-          "type": "string"
-        }
-      },
-      "title": "GelloSessionConfig",
-      "type": "object"
-    },
     "OnlineDaggerAnnounce": {
       "description": "``SessionAnnounce.online_dagger`` (15-online-dagger \u00a76): the paths the trainer node\nneeds \u2014 the session directory and the rollouts dataset it reads (a MAVIS\nepisode-directory dataset with the ``actor`` column). The trainer keeps its own\nartefacts wherever it likes (the skill suggests ``<session_dir>/trainer/``; the\nruntime never reads them). Field order is the contract (both goldens pin it).",
       "properties": {
@@ -271,17 +253,6 @@
           "title": "Frames",
           "type": "object"
         },
-        "gello": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/GelloSessionConfig"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
         "kind": {
           "enum": [
             "hardware",
@@ -295,8 +266,7 @@
             "teleop",
             "collect",
             "dagger",
-            "inference",
-            "gello"
+            "inference"
           ],
           "title": "Mode",
           "type": "string"
@@ -454,13 +424,6 @@
     "epoch": {
       "title": "Epoch",
       "type": "string"
-    },
-    "external_arms": {
-      "items": {
-        "type": "string"
-      },
-      "title": "External Arms",
-      "type": "array"
     },
     "frames": {
       "additionalProperties": {

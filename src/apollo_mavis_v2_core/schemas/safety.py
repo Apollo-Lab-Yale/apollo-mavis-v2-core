@@ -21,10 +21,6 @@ class CommandSource(str, Enum):
     POLICY = "policy"
     TAKEOVER = "takeover"
     PLANNER = "planner"
-    # phase-15 (16-gello §6 / §8.2; 2026-09-09): a tick whose Manipulation Arm command came
-    # from the GELLO leader arm (joint-space follow). Rides gate events, the health line and
-    # the generated UI union; datasets are unaffected in v1 (gello records nothing). Appended
-    GELLO = "gello"
 
 
 class CollisionEvent(BaseModel):

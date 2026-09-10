@@ -20,7 +20,6 @@ from apollo_mavis_v2_core.errors import SchemaExportError
 from apollo_mavis_v2_core.protocol import (
     control,
     external,
-    gello,
     keymap,
     maintenance,
     microphone,
@@ -80,18 +79,6 @@ EXPORTED_MODELS: dict[str, type[BaseModel]] = {
     # OnlineDaggerStatus rides TelemetryMsg's $defs
     "OnlineDaggerConfig": session.OnlineDaggerConfig,
     "OnlineDaggerSessionInfo": session.OnlineDaggerSessionInfo,
-    # GELLO Manipulation (phase-15, 2026-09-09; 16-gello §8.1 / §8.4): the SessionSpec block
-    # (also rides SessionSpec / SessionInfo $defs, the OnlineDaggerConfig precedent) and the
-    # session-less REST models of GET /api/gello, POST /api/gello/calibrate and
-    # POST /api/gello/preview; GelloTelemetry / GelloViewpointTelemetry ride TelemetryMsg's
-    # $defs, GelloPairInfo GelloPreviewResult's
-    "GelloSessionConfig": session.GelloSessionConfig,
-    "GelloInfo": gello.GelloInfo,
-    "GelloCalibrateRequest": gello.GelloCalibrateRequest,
-    "GelloCalibrateResult": gello.GelloCalibrateResult,
-    "GelloPreviewRequest": gello.GelloPreviewRequest,
-    "GelloPreviewResult": gello.GelloPreviewResult,
-    "GelloPairInfo": gello.GelloPairInfo,
     # microphone (§12; REST /api/microphones — phase-11)
     "MicrophoneInfo": microphone.MicrophoneInfo,
     # arm maintenance (§12; REST POST /api/hardware/arms/{arm_id}/maintenance —

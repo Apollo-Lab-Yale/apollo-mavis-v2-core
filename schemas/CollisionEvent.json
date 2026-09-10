@@ -7,8 +7,7 @@
         "joint_jog",
         "policy",
         "takeover",
-        "planner",
-        "gello"
+        "planner"
       ],
       "title": "CommandSource",
       "type": "string"

@@ -22,9 +22,7 @@
         "takeover",
         "handback",
         "train_now",
-        "goto_profile",
-        "gello_pause",
-        "gello_resume"
+        "goto_profile"
       ],
       "title": "Name",
       "type": "string"

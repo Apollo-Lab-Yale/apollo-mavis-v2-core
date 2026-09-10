@@ -1140,9 +1140,8 @@ def test_telemetry_microphone_block_is_additive():
         arms=[], collision=CollisionReport.ok(), clearances=[],
         episode=None, dagger=None, inference=None, microphone=_MIC_LIVE,
     )
-    assert list(TelemetryMsg.model_fields)[-7:] == [
+    assert list(TelemetryMsg.model_fields)[-6:] == [
         "session", "tracker", "microphone", "external", "hardware_monitor", "datasets",
-        "gello",  # phase-15 (16-gello §8.3), appended last
     ]
     assert TelemetryMsg.model_fields["microphone"].default is None
     legacy = frame.model_dump(mode="json")
@@ -1356,9 +1355,8 @@ def test_telemetry_hardware_monitor_block_is_additive():
         arms=[], collision=CollisionReport.ok(), clearances=[],
         episode=None, dagger=None, inference=None, hardware_monitor=_HW_MONITOR,
     )
-    assert list(TelemetryMsg.model_fields)[-7:] == [
+    assert list(TelemetryMsg.model_fields)[-6:] == [
         "session", "tracker", "microphone", "external", "hardware_monitor", "datasets",
-        "gello",  # phase-15 (16-gello §8.3), appended last
     ]
     assert TelemetryMsg.model_fields["hardware_monitor"].default is None
     legacy = frame.model_dump(mode="json")
@@ -1933,7 +1931,6 @@ def test_session_info_kind_and_speed_scale_additive():
         "policy_source",  # phase-12 echo (additive)
         "fault_detail",  # 2026-09-08 (additive): the session-level notice, "" by default
         "online_dagger",  # phase-14 echo (additive; 15-online-dagger §5)
-        "gello",  # phase-15 echo (additive; 16-gello §8.1)
     }
     assert SessionInfo.model_fields["fault_detail"].default == ""
     legacy = {
@@ -2467,8 +2464,7 @@ def test_session_spec_online_dagger_cross_field_rules():
     """15-online-dagger §5: ``online_dagger`` needs mode dagger + policy_source external
     and forbids ``dataset`` / ``dataset_resume`` (the rollouts repo id is derived); the
     block is appended last, defaults to None and is inert on every other session."""
-    # phase-15 appended ``gello`` after it (16-gello §8.1) — still additive, still last-but-one
-    assert list(SessionSpec.model_fields)[-2:] == ["online_dagger", "gello"]
+    assert list(SessionSpec.model_fields)[-1] == "online_dagger"
     assert SessionSpec.model_fields["online_dagger"].default is None
     spec = _online_dagger_spec()
     assert spec.online_dagger is not None and spec.online_dagger.session_name == "s1"
@@ -2514,7 +2510,7 @@ def test_session_spec_online_dagger_cross_field_rules():
 def test_session_info_echoes_online_dagger():
     """15-online-dagger §5: ``SessionInfo.online_dagger`` echoes the spec block (None
     otherwise), appended last so pre-phase-14 producers and consumers keep parsing."""
-    assert list(SessionInfo.model_fields)[-2:] == ["online_dagger", "gello"]  # phase-15 after
+    assert list(SessionInfo.model_fields)[-1] == "online_dagger"
     assert SessionInfo.model_fields["online_dagger"].default is None
     base = dict(session_id="s9", epoch="e", mode="dagger", arms=["grip"], streams=["sim"],
                 state="running", policy_source="external")
@@ -2539,11 +2535,8 @@ def test_action_name_gains_takeover_handback_train_now_without_keys():
     from apollo_mavis_v2_core.protocol import KEYMAP, ActionName
 
     names = get_args(ActionName)
-    # goto_profile (2026-09-08) is appended after the three (see the test below), and
-    # phase-15's gello_pause / gello_resume after that (test_gello_protocol.py).
-    assert names[-6:] == (
-        "takeover", "handback", "train_now", "goto_profile", "gello_pause", "gello_resume",
-    )
+    # goto_profile (2026-09-08) is appended after the three; see the test below.
+    assert names[-4:] == ("takeover", "handback", "train_now", "goto_profile")
     assert "takeover_toggle" in names
     assert not any(n.startswith("pro_") for n in names)  # the v1.0 spelling is gone
     for name in ("takeover", "handback", "train_now"):
@@ -2611,8 +2604,7 @@ def test_external_spellings_gain_the_online_dagger_ones():
     round_trip = ext.PolicySpecAnnounce.model_validate_json(trainer_node.model_dump_json())
     assert round_trip == trainer_node
     # SessionAnnounce.online_dagger + OnlineDaggerAnnounce field order
-    # phase-15 appended ``external_arms`` after it (16-gello §7); both goldens moved together
-    assert list(ext.SessionAnnounce.model_fields)[-2:] == ["online_dagger", "external_arms"]
+    assert list(ext.SessionAnnounce.model_fields)[-1] == "online_dagger"
     assert ext.SessionAnnounce.model_fields["online_dagger"].default is None
     assert _ANNOUNCE_RUNNING.online_dagger is None
     assert list(ext.OnlineDaggerAnnounce.model_fields) == [
@@ -2862,7 +2854,7 @@ def test_dataset_layout_and_online_dagger_session_rest_models():
 
 
 def test_action_name_gains_goto_profile_with_required_profile_id():
-    """2026-09-08: ``goto_profile`` is appended AFTER train_now, takes exactly
+    """2026-09-08: ``goto_profile`` is the LAST ActionName, takes exactly
     ``{profile_id}`` (ProfileStore id charset, required, ``extra="forbid"``) and is
     deliberately NOT a keymap row (the keymap is operator-owned; motion is
     operator-requested via the UI and runs through the gated execute_plan path)."""
@@ -2871,8 +2863,7 @@ def test_action_name_gains_goto_profile_with_required_profile_id():
 
     assert ReExported is GotoProfileArgs  # exported from the protocol package
     names = get_args(ActionName)
-    # LAST until phase-15 appended gello_pause / gello_resume after it (16-gello §8.2)
-    assert names[-3] == "goto_profile"
+    assert names[-1] == "goto_profile"
     assert names.index("goto_profile") > names.index("train_now")  # appended, not inserted
     assert not any(row.action == "goto_profile" for row in KEYMAP)
     assert len(KEYMAP) == 24  # the operator's table is untouched
