@@ -48,6 +48,11 @@ class ArmTelemetry(BaseModel):
     #   for, e.g. "controller error 24: Speed Exceeds Limit"; "" = none
     recovering: bool = False  # additive (phase-09b): recovery ran (session RECOVERING),
     #   streaming resumes once the operator re-grips the clutch
+    collision_sensitivity: int | None = None  # additive (2026-09-11): the collision
+    #   sensitivity the operator WROTE this session (set_collision_sensitivity, 1..3);
+    #   None = the config value / unknown. Volatile: the config value returns at the next
+    #   driver connect. The runtime fills it from its per-arm requested-level map, the
+    #   session driver's report stream carries no read-back (04-runtime §13.3)
 
 
 class ClearanceItem(BaseModel):

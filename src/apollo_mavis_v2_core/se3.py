@@ -16,10 +16,23 @@ from .types import Pose, Quat, Twist, Vec3
 TCP_OFFSET_M = 0.172
 """link7 flange -> link_tcp along the tool +Z axis (matches the MJCF assets)."""
 
+FLANGE_TO_TCP_QUAT = (0.0, 0.0, 0.0, 1.0)
+"""Rz(pi), wxyz: the flange -> ``link_tcp`` ROTATION of a gripper arm (2026-09-11).
+
+The xArm Gripper base is mounted 180 deg about the tool z axis under link7 (MJCF
+``xarm_gripper_base_link`` ``quat="0 0 0 1"``) and ``link_tcp`` is its child,
+``TCP_OFFSET_M`` further along tool z. A gripper-less arm's ``link_tcp`` IS the flange
+(the sim builder adds the site at link7 with no offset), so the rotation applies to
+gripper arms only - see :func:`flange_to_tcp`. Not to be confused with the legacy
+180-deg-about-X constant below.
+"""
+
 LEGACY_FLANGE_QUAT_OFFSET = (0.0, 1.0, 0.0, 0.0)
 """Legacy xarm7-ik 180°-about-X flange convention ("identity = gripper down").
 
-See 10-frames-and-data.md for the full compatibility mapping.
+A DIFFERENT thing from :data:`FLANGE_TO_TCP_QUAT` (180° about tool Z, the real
+gripper mount): this one only maps legacy datasets. See 10-frames-and-data.md for
+the full compatibility mapping.
 """
 
 RAIL_TRAVEL_M = 0.65
@@ -114,31 +127,85 @@ def mat_to_quat(m: np.ndarray) -> Quat:
 # --- Euler / rotation-vector conversions -------------------------------------
 
 def rpy_to_quat(rpy) -> Quat:
-    """xArm SDK RPY (intrinsic XYZ: R = Rx(roll) @ Ry(pitch) @ Rz(yaw)) -> quat.
+    """xArm SDK RPY -> quat. Extrinsic XYZ == intrinsic ZYX:
+    ``R = Rz(yaw) @ Ry(pitch) @ Rx(roll)``.
 
-    Only ``apollo_mavis_v2_hardware.units`` should call this; verify against a
-    known controller pose during hardware bring-up (02-hardware §2).
+    Verified against 15 hardware episodes on 2026-09-11 (FK of the recorded joints vs
+    the controller's reported RPY agree to 0.0001 deg); the pre-2026-09-11
+    ``Rx @ Ry @ Rz`` composition was WRONG for any pose with two non-zero angles.
+    Only ``apollo_mavis_v2_hardware.units`` should call this (02-hardware §2).
     """
     r, p, y = (float(v) for v in rpy)
     qx = np.array([np.cos(r / 2), np.sin(r / 2), 0.0, 0.0])
     qy = np.array([np.cos(p / 2), 0.0, np.sin(p / 2), 0.0])
     qz = np.array([np.cos(y / 2), 0.0, 0.0, np.sin(y / 2)])
-    return quat_mul(quat_mul(qx, qy), qz)
+    return quat_mul(quat_mul(qz, qy), qx)
 
 
 def quat_to_rpy(q: Quat) -> np.ndarray:
-    """Inverse of :func:`rpy_to_quat` (intrinsic XYZ), gimbal-safe at |pitch|=pi/2."""
+    """Exact inverse of :func:`rpy_to_quat` (extrinsic XYZ), gimbal-safe at |pitch|=pi/2."""
     m = quat_to_mat(q)
-    # R = Rx @ Ry @ Rz  =>  m[0,2] = sin(pitch)
-    sp = float(np.clip(m[0, 2], -1.0, 1.0))
+    # R = Rz @ Ry @ Rx  =>  m[2,0] = -sin(pitch)
+    sp = float(np.clip(-m[2, 0], -1.0, 1.0))
     pitch = np.arcsin(sp)
     if abs(sp) < 1.0 - 1e-9:
-        roll = np.arctan2(-m[1, 2], m[2, 2])
-        yaw = np.arctan2(-m[0, 1], m[0, 0])
+        roll = np.arctan2(m[2, 1], m[2, 2])
+        yaw = np.arctan2(m[1, 0], m[0, 0])
     else:  # gimbal lock: fold yaw into roll
-        roll = np.arctan2(m[2, 1], m[1, 1])
+        # at cos(pitch) = 0: m[1,1] = cos(yaw -/+ roll), m[1,2] = -/+ sin(yaw -/+ roll)
+        roll = np.arctan2(-m[1, 2], m[1, 1])
         yaw = 0.0
     return np.array([roll, pitch, yaw])
+
+
+# --- 6-D rotation representation (Zhou et al. 2019) -----------------------------
+
+_ROT6D_EPS = 1e-6
+
+
+def mat_to_rot6d(m: np.ndarray) -> np.ndarray:
+    """Rotation matrix -> the first two COLUMNS, column-major ``[R00,R10,R20,R01,R11,R21]``.
+
+    The stack-wide continuous rotation codec for absolute-pose actions
+    (``abs_ee``, 10-frames §3.1); decode with :func:`rot6d_to_mat`.
+    """
+    m = np.asarray(m, dtype=np.float64)
+    if m.shape != (3, 3):
+        raise ValueError(f"expected (3, 3) rotation matrix, got {m.shape}")
+    return np.concatenate([m[:, 0], m[:, 1]])
+
+
+def rot6d_to_mat(r6) -> np.ndarray:
+    """Gram-Schmidt decode of :func:`mat_to_rot6d`: ``b1 = normalize(c1)``,
+    ``b2 = normalize(c2 - (b1 . c2) b1)``, ``b3 = b1 x b2``; ``R = [b1 b2 b3]``.
+
+    Tolerates a perturbed (non-orthonormal) pair; raises ``ValueError`` when a column
+    norm is below 1e-6 or the two columns are parallel within 1e-6.
+    """
+    r6 = np.asarray(r6, dtype=np.float64).reshape(-1)
+    if r6.shape != (6,):
+        raise ValueError(f"expected 6 values, got {r6.shape}")
+    c1, c2 = r6[:3], r6[3:]
+    n1 = float(np.linalg.norm(c1))
+    if n1 < _ROT6D_EPS or float(np.linalg.norm(c2)) < _ROT6D_EPS:
+        raise ValueError("rot6d: a column is ~zero")
+    b1 = c1 / n1
+    u2 = c2 - float(np.dot(b1, c2)) * b1
+    n2 = float(np.linalg.norm(u2))
+    if n2 < _ROT6D_EPS:
+        raise ValueError("rot6d: the two columns are parallel")
+    b2 = u2 / n2
+    b3 = np.cross(b1, b2)
+    return np.column_stack([b1, b2, b3])
+
+
+def quat_to_rot6d(q: Quat) -> np.ndarray:
+    return mat_to_rot6d(quat_to_mat(q))
+
+
+def rot6d_to_quat(r6) -> Quat:
+    """Canonical ``w >= 0`` (via :func:`mat_to_quat`)."""
+    return mat_to_quat(rot6d_to_mat(r6))
 
 
 def rotvec_to_quat(r) -> Quat:
@@ -216,6 +283,38 @@ def pose_inv(a: Pose) -> Pose:
 def pose_between(a: Pose, b: Pose) -> Pose:
     """Relative transform a⁻¹ ⊕ b."""
     return pose_mul(pose_inv(a), b)
+
+
+def pose_interp(a: Pose, b: Pose, t: float) -> Pose:
+    """Lerp position + slerp orientation from ``a`` (t=0) to ``b`` (t=1); t clipped to [0, 1]."""
+    t = min(1.0, max(0.0, float(t)))
+    return Pose(
+        a.position + (b.position - a.position) * t,
+        quat_slerp(a.orientation, b.orientation, t),
+    )
+
+
+# --- flange <-> TCP ----------------------------------------------------------------
+
+_FLANGE_TO_TCP = Pose(
+    np.array([0.0, 0.0, TCP_OFFSET_M]), np.array(FLANGE_TO_TCP_QUAT, dtype=np.float64)
+)
+
+
+def flange_to_tcp(pose: Pose, *, gripper: bool) -> Pose:
+    """link7 flange pose -> the twin's ``link_tcp`` pose, same parent frame.
+
+    ``gripper=True``: ``pose ⊕ (Trans(0, 0, TCP_OFFSET_M), Rz(pi))`` - the gripper base
+    is mounted 180 deg about tool z under link7 and ``link_tcp`` sits 0.172 m further
+    along tool z. ``gripper=False``: unchanged - a gripper-less arm's ``link_tcp`` IS the
+    flange (sim builder adds the site at link7 with no offset). 10-frames §2.4.
+    """
+    return pose_mul(pose, _FLANGE_TO_TCP) if gripper else pose
+
+
+def tcp_to_flange(pose: Pose, *, gripper: bool) -> Pose:
+    """Inverse of :func:`flange_to_tcp`."""
+    return pose_mul(pose, pose_inv(_FLANGE_TO_TCP)) if gripper else pose
 
 
 def pose_error(a: Pose, b: Pose) -> tuple[float, float]:

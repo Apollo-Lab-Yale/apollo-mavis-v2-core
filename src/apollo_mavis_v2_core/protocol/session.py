@@ -377,6 +377,11 @@ class EpisodePlaybackInfo(BaseModel):
     arms: list[EpisodePlaybackArm]  # the INITIAL state, one row per recorded arm
     playable: bool
     reason: str = ""  # operator-facing; "" when playable
+    sources: list[str] = ["state"]  # 2026-09-11: the replay sources this episode offers -
+    #   ``state`` (joint replay of ``observation.state``) always; ``delta_ee`` when the
+    #   ``action`` column is present, ``abs_ee`` when ``action.abs_ee`` is (10-frames §3.1)
+    action_space: str | None = None  # the recorded ``action`` column's space (``delta_ee``
+    #   for every dataset the cell records), None when unknown / no action column
 
 
 class EpisodePlaybackRequest(BaseModel):
@@ -387,6 +392,13 @@ class EpisodePlaybackRequest(BaseModel):
     is the operator's rule — you cannot replay a trajectory from the wrong place.
     ``play`` streams the recorded trajectory through the same twin-planned, gated
     executor; ``stop`` cancels whatever is in flight.
+
+    ``source`` (2026-09-11) picks WHAT is replayed on ``play``: ``state`` (the default) is
+    the joint replay of ``observation.state``; ``delta_ee`` / ``abs_ee`` replay the
+    recorded ``action`` / ``action.abs_ee`` column through the executor path the policy
+    uses (``dagger/step.py``) inside the current session's control loop - refused with
+    ``ok: false`` on hardware sessions until the operator admits it, and when the
+    column is absent from the episode.
     """
 
     repo_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_\-]*/[A-Za-z0-9][A-Za-z0-9_\-]*$")
@@ -398,6 +410,7 @@ class EpisodePlaybackRequest(BaseModel):
     #   `Z` travel verbatim, but it must start with an alphanumeric so no `..` or `.hidden`
     #   can reach the directory join.
     action: Literal["goto_initial", "play", "stop"]
+    source: Literal["state", "delta_ee", "abs_ee"] = "state"  # what ``play`` replays
 
     @field_validator("episode_id")
     @classmethod

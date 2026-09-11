@@ -386,6 +386,27 @@ _MAINT_RECOVER_SESSION = ArmMaintenanceResult(
 _MAINT_RECOVER_REFUSED = ArmMaintenanceResult(
     arm_id="view", op="recover", path="monitor", ok=False, detail="recover needs a session",
 )
+# 2026-09-11: the operator's collision-sensitivity override (1..3) - one write, both paths.
+_MAINT_SENS_MONITOR = ArmMaintenanceResult(
+    arm_id="grip", op="set_collision_sensitivity", path="monitor", ok=True,
+    detail="collision sensitivity set to 2 (was 3; the config value 3 is re-applied at the "
+           "next connect)",
+    sdk_codes={"set_collision_sensitivity": 0},  # exactly one write, never motion_enable
+    before=_MON_GRIP_RUNNING.model_copy(update={"collision_sensitivity": 3}),
+    after=_MON_GRIP_RUNNING.model_copy(update={"collision_sensitivity": 2}),
+    collision_sensitivity=2,
+)
+_MAINT_SENS_SESSION = ArmMaintenanceResult(
+    arm_id="grip", op="set_collision_sensitivity", path="session", ok=True,
+    detail="collision sensitivity set to 1",
+    sdk_codes={"set_collision_sensitivity": 0},
+    collision_sensitivity=1,  # no monitor samples on the session path: this is the read-back
+)
+_MAINT_SENS_REFUSED = ArmMaintenanceResult(
+    arm_id="view", op="set_collision_sensitivity", path="monitor", ok=False,
+    detail="collision sensitivity still reads 3 after writing 2",
+    sdk_codes={"set_collision_sensitivity": 0},
+)
 # phase-09c: home_rail is twin-gated by a full-travel sweep at the arm's CURRENT posture.
 _Q_FOLDED = [3.141592653589793, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # xArm7 zero, joint 1 = pi
 _SWEEP_CLEAR = RailSweepVerdict(
@@ -719,6 +740,12 @@ _WIRE_MODELS: list[BaseModel] = [
     ArmMaintenanceRequest(op="clear_errors"),
     ArmMaintenanceRequest(op="apply_backstops"),
     ArmMaintenanceRequest(op="recover"),
+    # 2026-09-11 collision-sensitivity override: the level rides the body; both paths answer
+    ArmMaintenanceRequest(op="set_collision_sensitivity", collision_sensitivity=2),
+    ArmMaintenanceRequest(op="set_collision_sensitivity", collision_sensitivity=1),
+    _MAINT_SENS_MONITOR,
+    _MAINT_SENS_SESSION,
+    _MAINT_SENS_REFUSED,
     ArmMaintenanceResult(arm_id="grip", op="clear_errors", path="monitor", ok=False,
                          detail="monitor not connected"),
     _MAINT_CLEAR_OK,
@@ -1456,6 +1483,7 @@ def test_arm_telemetry_fault_fields_are_additive():
     assert set(ArmTelemetry.model_fields) == {
         "arm_id", "connected", "q", "rail_pos_m", "ee_pose", "gripper_open_frac",
         "error_code", "warn_code", "stale", "goto", "fault_detail", "recovering",
+        "collision_sensitivity",  # 2026-09-11: the operator's in-session level (1..3) / None
     }
     required = {n for n, f in ArmTelemetry.model_fields.items() if f.is_required()}
     assert required == {
@@ -1463,12 +1491,22 @@ def test_arm_telemetry_fault_fields_are_additive():
     }
     assert ArmTelemetry.model_fields["fault_detail"].default == ""
     assert ArmTelemetry.model_fields["recovering"].default is False
+    assert ArmTelemetry.model_fields["collision_sensitivity"].default is None
     legacy = _ARM.model_dump(mode="json")
     legacy.pop("fault_detail")
     legacy.pop("recovering")
+    legacy.pop("collision_sensitivity")
     parsed = ArmTelemetry.model_validate(legacy)
     assert parsed.fault_detail == "" and parsed.recovering is False
+    assert parsed.collision_sensitivity is None
     assert parsed == _ARM
+    # 2026-09-11: the operator's in-session collision-sensitivity override rides the arm
+    # row (None = config value / unknown); an int on the wire, never a string.
+    lowered = json.loads(_ARM.model_copy(update={"collision_sensitivity": 2}).model_dump_json())
+    assert lowered["collision_sensitivity"] == 2
+    assert ArmTelemetry.model_validate(lowered).collision_sensitivity == 2
+    with pytest.raises(ValidationError):
+        ArmTelemetry.model_validate({**lowered, "collision_sensitivity": "high"})
     # FAULT: the controller code AND its SDK title; RECOVERING: code cleared, flag up until
     # the operator re-grips the clutch (04-runtime §15).
     faulted = json.loads(_ARM_FAULTED.model_dump_json())
@@ -1501,17 +1539,20 @@ def test_arm_maintenance_models_pinned():
     and ``job_id`` - all additive)."""
     assert get_args(ArmMaintenanceOp) == (
         "clear_errors", "apply_backstops", "recover", "home_rail",
+        "set_collision_sensitivity",  # 2026-09-11: the operator's level 1..3 override
     )
     assert get_args(MaintenancePath) == ("monitor", "session")
-    assert set(ArmMaintenanceRequest.model_fields) == {"op", "dry_run"}
+    assert set(ArmMaintenanceRequest.model_fields) == {"op", "dry_run", "collision_sensitivity"}
     assert ArmMaintenanceRequest.model_fields["op"].is_required()
     assert ArmMaintenanceRequest.model_fields["op"].annotation == ArmMaintenanceOp
     assert ArmMaintenanceRequest.model_fields["dry_run"].default is False
+    assert ArmMaintenanceRequest.model_fields["collision_sensitivity"].default is None
     assert set(ArmMaintenanceResult.model_fields) == {
         "arm_id", "op", "path", "ok", "detail", "sdk_codes", "warnings", "before", "after",
         "rail_sweep",
         # phase-09d async job: how the op ran + the RailHomingJob id
         "status", "job_id",
+        "collision_sensitivity",  # 2026-09-11: the level set_collision_sensitivity wrote
     }
     required = {n for n, f in ArmMaintenanceResult.model_fields.items() if f.is_required()}
     assert required == {"arm_id", "op", "path", "ok"}
@@ -1521,6 +1562,7 @@ def test_arm_maintenance_models_pinned():
     assert bare.detail == "" and bare.sdk_codes == {} and bare.warnings == []
     assert bare.before is None and bare.after is None and bare.rail_sweep is None
     assert bare.status == "done" and bare.job_id is None
+    assert bare.collision_sensitivity is None
     # Mutable defaults are per-instance (pydantic copies them).
     other = ArmMaintenanceResult(arm_id="grip", op="clear_errors", path="monitor", ok=True)
     bare.sdk_codes["clean_error"] = 0
@@ -1555,12 +1597,62 @@ def test_arm_maintenance_models_pinned():
                              before={"status": "running"})  # arm_id required in the sample
     # Body wire form is flat; dry_run defaults False and a legacy {"op"} body still parses.
     assert json.loads(ArmMaintenanceRequest(op="apply_backstops").model_dump_json()) == {
-        "op": "apply_backstops", "dry_run": False,
+        "op": "apply_backstops", "dry_run": False, "collision_sensitivity": None,
     }
     assert ArmMaintenanceRequest.model_validate({"op": "recover"}).dry_run is False
     assert json.loads(ArmMaintenanceRequest(op="home_rail", dry_run=True).model_dump_json()) == {
-        "op": "home_rail", "dry_run": True,
+        "op": "home_rail", "dry_run": True, "collision_sensitivity": None,
     }
+    # 2026-09-11 set_collision_sensitivity: the level is REQUIRED for that op and 1..3 only
+    # (0 = off, 4 / 5 false-trigger under payload -> 422 at the wire); other ops ignore it.
+    for level in (1, 2, 3):
+        req = ArmMaintenanceRequest(op="set_collision_sensitivity", collision_sensitivity=level)
+        assert req.collision_sensitivity == level and req.dry_run is False
+        assert json.loads(req.model_dump_json()) == {
+            "op": "set_collision_sensitivity", "dry_run": False, "collision_sensitivity": level,
+        }
+    assert ArmMaintenanceRequest.model_validate(
+        {"op": "set_collision_sensitivity", "collision_sensitivity": 2}
+    ).collision_sensitivity == 2
+    with pytest.raises(ValidationError, match="needs collision_sensitivity"):
+        ArmMaintenanceRequest(op="set_collision_sensitivity")
+    with pytest.raises(ValidationError, match="needs collision_sensitivity"):
+        ArmMaintenanceRequest.model_validate({"op": "set_collision_sensitivity"})
+    for bad in (0, 4, 5, -1, 2.5, "high"):  # lax ints: "2" -> 2 like everywhere else
+        with pytest.raises(ValidationError):
+            ArmMaintenanceRequest(op="set_collision_sensitivity", collision_sensitivity=bad)
+    for bad in (0, 4, 5):  # the bound is on the field, whatever the op
+        with pytest.raises(ValidationError):
+            ArmMaintenanceRequest(op="clear_errors", collision_sensitivity=bad)
+    assert ArmMaintenanceRequest(op="clear_errors", collision_sensitivity=2).op == "clear_errors"
+    assert ArmMaintenanceRequest(op="home_rail", dry_run=True).collision_sensitivity is None
+    # The result echoes the level written (1..3 or None); the session path carries no
+    # monitor samples, so the UI toasts this field. Ints only.
+    sens = json.loads(_MAINT_SENS_MONITOR.model_dump_json())
+    assert (sens["op"], sens["path"], sens["ok"], sens["collision_sensitivity"]) == (
+        "set_collision_sensitivity", "monitor", True, 2,
+    )
+    assert list(sens["sdk_codes"]) == ["set_collision_sensitivity"]  # ONE write
+    assert "motion_enable" not in sens["sdk_codes"]
+    assert sens["before"]["collision_sensitivity"] == 3
+    assert sens["after"]["collision_sensitivity"] == 2
+    assert ArmMaintenanceResult.model_validate(sens) == _MAINT_SENS_MONITOR
+    session = json.loads(_MAINT_SENS_SESSION.model_dump_json())
+    assert session["path"] == "session" and session["before"] is None and session["after"] is None
+    assert session["collision_sensitivity"] == 1
+    assert ArmMaintenanceResult.model_validate(session) == _MAINT_SENS_SESSION
+    refused = json.loads(_MAINT_SENS_REFUSED.model_dump_json())
+    assert refused["ok"] is False and refused["collision_sensitivity"] is None
+    with pytest.raises(ValidationError):
+        ArmMaintenanceResult(arm_id="grip", op="set_collision_sensitivity", path="monitor",
+                             ok=True, collision_sensitivity="high")
+    with pytest.raises(ValidationError):
+        ArmMaintenanceResult(arm_id="grip", op="set_collision_sensitivity", path="monitor",
+                             ok=True, collision_sensitivity=2.5)
+    # A pre-2026-09-11 result (no collision_sensitivity key) still parses: additive.
+    legacy = json.loads(_MAINT_CLEAR_OK.model_dump_json())
+    legacy.pop("collision_sensitivity")
+    assert ArmMaintenanceResult.model_validate(legacy).collision_sensitivity is None
     # clear_errors on the monitor path: exactly clean_error + clean_warn in call order, the
     # before/after samples show C19 -> 0, and the op NEVER enabled motion.
     clear = json.loads(_MAINT_CLEAR_OK.model_dump_json())
@@ -2741,12 +2833,47 @@ def test_trainer_status_floats_are_finite_and_bounded():
     assert "$defs" not in schema  # a flat payload: no nested block
 
 
+def test_external_spellings_gain_the_per_arm_action_ones():
+    """14-dora v1.3 (2026-09-11): per-arm action streams are PREFIX spellings + helpers, never
+    appended to the fixed ``RUNTIME_INPUTS`` / ``POLICY_OUTPUTS`` tuples (their ids depend on
+    the configured arms, like ``cam_<id>``); ``PolicySpecModel`` gains ``arms`` and
+    ``action_frames`` appended LAST with empty defaults so a v1.2 node keeps parsing;
+    ``ExternalStatus.policy_arms`` is appended last too."""
+    assert ext.ARM_ACTION_OUTPUT_PREFIX == "action_"
+    assert ext.IN_POLICY_ARM_ACTION_PREFIX == "policy_action_"
+    assert ext.arm_action_output_id("grip") == "action_grip"
+    assert ext.policy_arm_action_input_id("view") == "policy_action_view"
+    assert ext.arm_id_from_policy_arm_action_input("policy_action_grip") == "grip"
+    assert ext.arm_id_from_policy_arm_action_input(ext.IN_POLICY_ACTION) is None
+    assert ext.arm_id_from_policy_arm_action_input("policy_action_") is None
+    assert ext.arm_id_from_arm_action_output("action_view") == "view"
+    assert ext.arm_id_from_arm_action_output(ext.POLICY_OUT_ACTION) is None
+    # the fixed tuples are untouched (three repos pin them and their last element)
+    assert ext.RUNTIME_INPUTS[-1] == ext.IN_POLICY_TRAINER_STATUS and len(ext.RUNTIME_INPUTS) == 6
+    assert ext.POLICY_OUTPUTS == ("action", "spec", "status", "trainer_status")
+    assert list(ext.PolicySpecModel.model_fields)[-2:] == ["arms", "action_frames"]
+    m = ext.PolicySpecModel(
+        action_space="delta_ee", action_frame="arm_base:grip", action_names=["grip_ee.dx"],
+        state_names=[],
+    )
+    assert m.arms == [] and m.action_frames == {}
+    assert list(ext.ExternalStatus.model_fields)[-1] == "policy_arms"
+    assert ext.ExternalStatus().policy_arms == []
+    # a v1.2 announce (no arms / action_frames) still validates
+    legacy = json.loads(_POLICY_SPEC_ANNOUNCE.model_dump_json())
+    del legacy["spec"]["arms"], legacy["spec"]["action_frames"]
+    assert ext.PolicySpecAnnounce.model_validate(legacy).spec.arms == []
+
+
 def test_external_status_trainer_fields_are_last_and_round_trip():
     """15-online-dagger §6/§8: ``ExternalStatus`` grew ``capabilities`` ([]) and
     ``trainer_status`` (None) — appended LAST (additive; the launcher gates "Start
     Online DAgger" on them before a session exists) and carried through
     ``telemetry.external`` unchanged."""
-    assert list(ext.ExternalStatus.model_fields)[-2:] == ["capabilities", "trainer_status"]
+    # (v1.3, 2026-09-11: ``policy_arms`` was appended after them - the per-arm action streams)
+    assert list(ext.ExternalStatus.model_fields)[-3:] == [
+        "capabilities", "trainer_status", "policy_arms",
+    ]
     assert ext.ExternalStatus.model_fields["capabilities"].default == []
     assert ext.ExternalStatus.model_fields["trainer_status"].default is None
     dumped = ext.ExternalStatus().model_dump()
@@ -2762,7 +2889,7 @@ def test_external_status_trainer_fields_are_last_and_round_trip():
         inference=None, external=status,
     )
     wire = json.loads(msg.model_dump_json())
-    assert list(wire["external"])[-2:] == ["capabilities", "trainer_status"]
+    assert list(wire["external"])[-3:] == ["capabilities", "trainer_status", "policy_arms"]
     assert wire["external"]["capabilities"] == ["online_dagger"]
     assert wire["external"]["trainer_status"]["state"] == "training"
     assert wire["external"]["trainer_status"]["metrics"]["loss"] == 0.0213

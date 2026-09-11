@@ -3,9 +3,10 @@
 ``POST /api/hardware/arms/{arm_id}/maintenance`` (body
 :class:`ArmMaintenanceRequest`, response :class:`ArmMaintenanceResult`) lets
 the operator clear xArm controller errors, (re)apply the controller-side
-safety parameters and home the linear track from the UI. Three of the four ops
-produce no motion (measured 2026-09-04 on the Perception Arm: ``clean_error``
-moved no joint by more than 5e-5 rad). ``home_rail`` is the ONE motion op:
+safety parameters, set the collision sensitivity and home the linear track
+from the UI. Four of the five ops produce no motion (measured 2026-09-04 on the
+Perception Arm: ``clean_error`` moved no joint by more than 5e-5 rad).
+``home_rail`` is the ONE motion op:
 operator-triggered, twin-gated, session-less — the carriage drives to the
 homing end, so the runtime first sweeps the digital twin over the full rail
 travel at the arm's CURRENT joint posture; the verdict rides
@@ -49,6 +50,20 @@ is the op ``"refused"`` (zero writes, a suggestion in ``detail``).
   arm's rail is unhomed (position unknown -> the twin cannot gate) and while a
   job runs ("rail homing in progress"), so this op is how the operator makes a
   session possible.
+* ``set_collision_sensitivity`` (2026-09-11, operator decision) — ONE write,
+  ``set_collision_sensitivity(level)``, ``level`` = the request's
+  ``collision_sensitivity`` (1, 2 or 3 only; anything else is 422, the
+  after-validator below). No motion. Works on BOTH paths: session-less on the
+  read-only monitor's poll thread (the Hardware-tab arm card; judged from the
+  rich-frame read-back like ``apply_backstops``) and inside a hardware session
+  on the session driver's monitor thread (the Cockpit's sensitivity control;
+  the runtime routes it through the driver's ``request_set_collision_sensitivity``
+  channel, ``before``/``after`` ``None`` - the ``real`` report stream carries no
+  read-back). VOLATILE: the controller default stays the config value (3 on
+  both lab arms), re-applied at EVERY driver connect by ``apply_backstops``, so
+  the override lasts until the next connect and the UI shows the controller's
+  ACTUAL read-back, never an optimistic value. The result echoes the level
+  written in :attr:`ArmMaintenanceResult.collision_sensitivity`.
 
 ``path`` records which thread executed the op; ``before``/``after`` are the
 monitor samples taken around it so the UI can show the error code going to 0.
@@ -67,7 +82,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 from apollo_mavis_v2_core.protocol.hardware_monitor import (
     ArmMaintenanceOp,
@@ -76,7 +91,8 @@ from apollo_mavis_v2_core.protocol.hardware_monitor import (
     MaintenanceProgress,
 )
 
-# ArmMaintenanceOp = Literal["clear_errors", "apply_backstops", "recover", "home_rail"]
+# ArmMaintenanceOp = Literal["clear_errors", "apply_backstops", "recover", "home_rail",
+#                            "set_collision_sensitivity"]
 # (defined in hardware_monitor.py, re-exported above - see the module docstring)
 # clear_errors:    clean_error + clean_warn, no enable (monitor path, no session)
 # apply_backstops: backstops.apply_backstops(api, cfg) (monitor path; 409 in a session)
@@ -85,6 +101,10 @@ from apollo_mavis_v2_core.protocol.hardware_monitor import (
 #                  409 in a session) — the ONE op that moves a mechanical part; since
 #                  phase-09d it may first run a planned pre-positioning motion as an
 #                  asynchronous RailHomingJob (status "accepted", 202)
+# set_collision_sensitivity: ONE write, set_collision_sensitivity(collision_sensitivity),
+#                  level 1..3 only (422 otherwise); monitor path without a session, session
+#                  path (the driver's monitor thread) inside one; no motion; volatile — the
+#                  config value returns at the next connect (2026-09-11)
 
 MaintenancePath = Literal["monitor", "session"]
 # monitor: executed on the read-only monitor's polling thread (no hardware session)
@@ -101,10 +121,24 @@ MaintenanceStatus = Literal["done", "accepted", "refused"]
 
 
 class ArmMaintenanceRequest(BaseModel):
-    """``POST /api/hardware/arms/{arm_id}/maintenance`` body."""
+    """``POST /api/hardware/arms/{arm_id}/maintenance`` body.
+
+    ``collision_sensitivity`` (additive, 2026-09-11) is the level the
+    ``set_collision_sensitivity`` op writes - REQUIRED for that op and 1, 2 or 3
+    only (the operator's admissible range; 0 = off, 4 and 5 false-trigger under
+    payload, so they are refused at the wire: 422). Every other op ignores it.
+    """
 
     op: ArmMaintenanceOp
     dry_run: bool = False  # home_rail only: sweep verdict alone, zero writes (additive)
+    collision_sensitivity: int | None = Field(None, ge=1, le=3)
+    # set_collision_sensitivity only: the level to write (1..3; required for that op)
+
+    @model_validator(mode="after")
+    def _level_required_for_set_collision_sensitivity(self) -> ArmMaintenanceRequest:
+        if self.op == "set_collision_sensitivity" and self.collision_sensitivity is None:
+            raise ValueError("set_collision_sensitivity needs collision_sensitivity (1, 2 or 3)")
+        return self
 
 
 class PrePositionPlan(BaseModel):
@@ -198,6 +232,13 @@ class ArmMaintenanceResult(BaseModel):
     ``ArmMaintenanceResult`` with ``status: done`` and the same ``job_id``,
     replaces it at ``GET .../maintenance/last``) or ``"refused"`` (nothing ran,
     ``ok`` False, suggestion in ``detail``).
+
+    2026-09-11 (additive): ``collision_sensitivity`` is the level the
+    ``set_collision_sensitivity`` op WROTE (1..3; ``None`` for every other op
+    and for a refusal) - the session path has no monitor sample to carry the
+    read-back, so the UI toasts this value; ``ok`` there means the SDK
+    accepted the write, on the monitor path that the rich-frame read-back
+    equals it.
     """
 
     arm_id: str
@@ -212,6 +253,7 @@ class ArmMaintenanceResult(BaseModel):
     rail_sweep: RailSweepVerdict | None = None  # home_rail twin verdict (additive)
     status: MaintenanceStatus = "done"  # accepted = async job started (202) (phase-09d)
     job_id: str | None = None  # RailHomingJob id when status == "accepted" (phase-09d)
+    collision_sensitivity: int | None = None  # set_collision_sensitivity: the level written
 
 
 __all__ = [

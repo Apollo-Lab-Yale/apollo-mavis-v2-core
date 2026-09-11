@@ -549,12 +549,17 @@ def test_telemetry_schema_arm_telemetry_gains_fault_fields(tmp_path):
     assert set(arm["properties"]) == {
         "arm_id", "connected", "q", "rail_pos_m", "ee_pose", "gripper_open_frac",
         "error_code", "warn_code", "stale", "goto", "fault_detail", "recovering",
+        "collision_sensitivity",  # 2026-09-11: the operator's in-session level (additive)
     }
     assert set(arm["required"]) == {
         "arm_id", "connected", "q", "rail_pos_m", "ee_pose", "gripper_open_frac", "error_code",
     }
     assert arm["properties"]["fault_detail"] == {
         "type": "string", "default": "", "title": "Fault Detail",
+    }
+    assert arm["properties"]["collision_sensitivity"] == {
+        "anyOf": [{"type": "integer"}, {"type": "null"}], "default": None,
+        "title": "Collision Sensitivity",
     }
     assert arm["properties"]["recovering"] == {
         "type": "boolean", "default": False, "title": "Recovering",
@@ -573,14 +578,24 @@ def test_arm_maintenance_schemas(tmp_path):
     out = tmp_path / "schemas"
     export(out)
     request = json.loads((out / "ArmMaintenanceRequest.json").read_text())
-    assert set(request["properties"]) == {"op", "dry_run"}
+    assert set(request["properties"]) == {"op", "dry_run", "collision_sensitivity"}
     assert request["required"] == ["op"]
     assert request["properties"]["op"] == {
-        "type": "string", "enum": ["clear_errors", "apply_backstops", "recover", "home_rail"],
+        "type": "string",
+        "enum": ["clear_errors", "apply_backstops", "recover", "home_rail",
+                 "set_collision_sensitivity"],  # 2026-09-11
         "title": "Op",
     }
     assert request["properties"]["dry_run"] == {
         "type": "boolean", "default": False, "title": "Dry Run",
+    }
+    # 2026-09-11: the level rides the body, bounded 1..3 IN THE SCHEMA (the UI's dropdown
+    # offers exactly those; the runtime answers 422 for anything else), nullable + defaulted
+    # so every other op's body is unchanged. The "required for set_collision_sensitivity"
+    # rule is a pydantic after-validator, invisible to JSON Schema.
+    assert request["properties"]["collision_sensitivity"] == {
+        "anyOf": [{"type": "integer", "minimum": 1, "maximum": 3}, {"type": "null"}],
+        "default": None, "title": "Collision Sensitivity",
     }
     assert "$defs" not in request  # flat body
 
@@ -589,6 +604,11 @@ def test_arm_maintenance_schemas(tmp_path):
         "arm_id", "op", "path", "ok", "detail", "sdk_codes", "warnings", "before", "after",
         "rail_sweep",
         "status", "job_id",  # phase-09d
+        "collision_sensitivity",  # 2026-09-11: the level written (unbounded here: read-back)
+    }
+    assert result["properties"]["collision_sensitivity"] == {
+        "anyOf": [{"type": "integer"}, {"type": "null"}],
+        "default": None, "title": "Collision Sensitivity",
     }
     assert set(result["required"]) == {"arm_id", "op", "path", "ok"}
     assert result["properties"]["arm_id"] == {"type": "string", "title": "Arm Id"}
@@ -963,6 +983,17 @@ def test_online_dagger_schemas(tmp_path):
         "type": "array", "items": {"type": "string"}, "default": [], "title": "Capabilities",
     }
     assert "capabilities" not in policy_spec["required"]
+    # 14-dora v1.3 (2026-09-11): PolicySpecModel.arms / action_frames, appended last, defaulted
+    model = policy_spec["$defs"]["PolicySpecModel"]  # (properties are sort_keys-ordered here;
+    #   the field ORDER is pinned by test_protocol)
+    assert model["properties"]["arms"] == {
+        "type": "array", "items": {"type": "string"}, "default": [], "title": "Arms",
+    }
+    assert model["properties"]["action_frames"] == {
+        "type": "object", "additionalProperties": {"type": "string"}, "default": {},
+        "title": "Action Frames",
+    }
+    assert "arms" not in model["required"] and "action_frames" not in model["required"]
 
     # REST rows: GET /api/online_dagger/sessions and GET /api/datasets/layout; DatasetInfo
     # gains namespace / path (defaulted).

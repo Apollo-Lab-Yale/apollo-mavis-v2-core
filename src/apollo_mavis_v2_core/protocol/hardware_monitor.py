@@ -38,10 +38,15 @@ ArmMonitorStatus = Literal["off", "connecting", "running", "stale", "paused", "e
 # paused:     a hardware session owns the box - connection released (hand-over)
 # error:      connect / read failure (runtime retries with exponential backoff)
 
-ArmMaintenanceOp = Literal["clear_errors", "apply_backstops", "recover", "home_rail"]
+ArmMaintenanceOp = Literal[
+    "clear_errors", "apply_backstops", "recover", "home_rail", "set_collision_sensitivity"
+]
 # The maintenance-op vocabulary of ``POST /api/hardware/arms/{arm_id}/maintenance``
 # (``protocol.maintenance`` documents each op and re-exports the name; it lives here
 # because MaintenanceProgress.op below needs it in the leaf - see the module docstring).
+# ``set_collision_sensitivity`` (2026-09-11): the operator's level 1..3 override of the
+# controller's collision sensitivity, one write, no motion; volatile - the config value
+# is re-applied at the next connect.
 
 MaintenancePhase = Literal[
     "queued",
@@ -96,9 +101,12 @@ class ArmMonitorTelemetry(BaseModel):
     Every field but ``arm_id`` defaults so an arm the monitor never reached
     still validates. ``q`` is the controller's 7 joint angles in radians,
     controller order - an IDENTITY mapping onto the twin's ``<arm>_joint1..7``
-    (verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller flange
+    (verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller FLANGE
     pose (``tcp_offset`` zero) in the arm base frame, ``[x, y, z]`` m followed
-    by ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package).
+    by ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package); the
+    RPY is the xArm extrinsic-XYZ convention (``Rz(yaw) . Ry(pitch) . Rx(roll)``).
+    The twin's ``link_tcp`` = flange (+) (Rz(pi), +0.172 m along tool z) on a
+    gripper arm - that is ``ArmState.ee_pose``, NOT this field.
     ``rail_pos_m`` is filled only while the track reports homed (``on_zero ==
     1``) AND enabled - the raw register is meaningless otherwise - whereas
     ``rail_raw_mm`` is always reported when the registers are readable.
@@ -112,7 +120,14 @@ class ArmMonitorTelemetry(BaseModel):
     safety parameters; ``backstops_match`` is the runtime's comparison against
     the arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of
     gravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is
-    true while a maintenance op executes on this arm.
+    true while a maintenance op executes on this arm. Since 2026-09-11 the
+    sensitivity term of ``backstops_match`` compares against the level the
+    operator last REQUESTED through the ``set_collision_sensitivity``
+    maintenance op when one is set (the runtime remembers it per arm until the
+    next driver connect re-applies the config value), so an intentional
+    override does not read as a mismatch; ``collision_sensitivity`` itself
+    stays the raw controller read-back - the UI's sensitivity control shows
+    exactly this value, never an optimistic one.
 
     phase-09d (additive): ``maintenance`` is the live :class:`MaintenanceProgress`
     of an asynchronous job (rail homing that first needs a planned
@@ -126,7 +141,7 @@ class ArmMonitorTelemetry(BaseModel):
     seq: int = 0  # last sample sequence number
     age_s: float | None = None  # now - t_mono of the last sample
     q: list[float] = []  # 7 joint angles, rad, controller order (identity to the twin)
-    tcp_pose: list[float] = []  # flange pose [x,y,z m, roll,pitch,yaw rad] in base frame
+    tcp_pose: list[float] = []  # FLANGE pose [x,y,z m, roll,pitch,yaw rad] in base frame
     rail_present: bool | None = None  # linear-track registers readable
     rail_homed: bool | None = None  # on_zero == 1
     rail_enabled: bool | None = None

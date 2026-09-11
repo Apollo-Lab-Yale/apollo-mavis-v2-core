@@ -7,6 +7,14 @@
           "title": "Action Frame",
           "type": "string"
         },
+        "action_frames": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Action Frames",
+          "type": "object"
+        },
         "action_names": {
           "items": {
             "type": "string"
@@ -22,6 +30,14 @@
           ],
           "title": "Action Space",
           "type": "string"
+        },
+        "arms": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Arms",
+          "type": "array"
         },
         "camera_keys": {
           "default": [],

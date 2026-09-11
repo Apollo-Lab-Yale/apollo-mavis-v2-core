@@ -1,6 +1,20 @@
 {
-  "description": "``POST /api/hardware/arms/{arm_id}/maintenance`` body.",
+  "description": "``POST /api/hardware/arms/{arm_id}/maintenance`` body.\n\n``collision_sensitivity`` (additive, 2026-09-11) is the level the\n``set_collision_sensitivity`` op writes - REQUIRED for that op and 1, 2 or 3\nonly (the operator's admissible range; 0 = off, 4 and 5 false-trigger under\npayload, so they are refused at the wire: 422). Every other op ignores it.",
   "properties": {
+    "collision_sensitivity": {
+      "anyOf": [
+        {
+          "maximum": 3,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Collision Sensitivity"
+    },
     "dry_run": {
       "default": false,
       "title": "Dry Run",
@@ -11,7 +25,8 @@
         "clear_errors",
         "apply_backstops",
         "recover",
-        "home_rail"
+        "home_rail",
+        "set_collision_sensitivity"
       ],
       "title": "Op",
       "type": "string"

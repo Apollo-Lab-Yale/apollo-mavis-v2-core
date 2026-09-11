@@ -36,7 +36,7 @@
       "type": "object"
     },
     "ArmMonitorTelemetry": {
-      "description": "One arm as seen by the read-only state monitor.\n\nEvery field but ``arm_id`` defaults so an arm the monitor never reached\nstill validates. ``q`` is the controller's 7 joint angles in radians,\ncontroller order - an IDENTITY mapping onto the twin's ``<arm>_joint1..7``\n(verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller flange\npose (``tcp_offset`` zero) in the arm base frame, ``[x, y, z]`` m followed\nby ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package).\n``rail_pos_m`` is filled only while the track reports homed (``on_zero ==\n1``) AND enabled - the raw register is meaningless otherwise - whereas\n``rail_raw_mm`` is always reported when the registers are readable.\n``gripper_open_frac`` is 0 closed .. 1 open (``None`` for gripper\n``\"none\"``); ``gripper_raw`` is the SDK reading for diagnosis.\n``error_code``/``warn_code`` are the controller's codes (e.g. 19 = End\nModule Communication Error); ``state`` 4 = stopped / not enabled.\n\nphase-09b read-back (slow poll, additive): ``collision_sensitivity`` /\n``tcp_load_kg`` / ``tcp_load_cog_mm`` are the controller's CURRENT\nsafety parameters; ``backstops_match`` is the runtime's comparison against\nthe arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of\ngravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is\ntrue while a maintenance op executes on this arm.\n\nphase-09d (additive): ``maintenance`` is the live :class:`MaintenanceProgress`\nof an asynchronous job (rail homing that first needs a planned\npre-positioning motion) on this arm, ``None`` when no job exists;\n``maintenance_busy`` stays true for the job's whole life.",
+      "description": "One arm as seen by the read-only state monitor.\n\nEvery field but ``arm_id`` defaults so an arm the monitor never reached\nstill validates. ``q`` is the controller's 7 joint angles in radians,\ncontroller order - an IDENTITY mapping onto the twin's ``<arm>_joint1..7``\n(verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller FLANGE\npose (``tcp_offset`` zero) in the arm base frame, ``[x, y, z]`` m followed\nby ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package); the\nRPY is the xArm extrinsic-XYZ convention (``Rz(yaw) . Ry(pitch) . Rx(roll)``).\nThe twin's ``link_tcp`` = flange (+) (Rz(pi), +0.172 m along tool z) on a\ngripper arm - that is ``ArmState.ee_pose``, NOT this field.\n``rail_pos_m`` is filled only while the track reports homed (``on_zero ==\n1``) AND enabled - the raw register is meaningless otherwise - whereas\n``rail_raw_mm`` is always reported when the registers are readable.\n``gripper_open_frac`` is 0 closed .. 1 open (``None`` for gripper\n``\"none\"``); ``gripper_raw`` is the SDK reading for diagnosis.\n``error_code``/``warn_code`` are the controller's codes (e.g. 19 = End\nModule Communication Error); ``state`` 4 = stopped / not enabled.\n\nphase-09b read-back (slow poll, additive): ``collision_sensitivity`` /\n``tcp_load_kg`` / ``tcp_load_cog_mm`` are the controller's CURRENT\nsafety parameters; ``backstops_match`` is the runtime's comparison against\nthe arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of\ngravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is\ntrue while a maintenance op executes on this arm. Since 2026-09-11 the\nsensitivity term of ``backstops_match`` compares against the level the\noperator last REQUESTED through the ``set_collision_sensitivity``\nmaintenance op when one is set (the runtime remembers it per arm until the\nnext driver connect re-applies the config value), so an intentional\noverride does not read as a mismatch; ``collision_sensitivity`` itself\nstays the raw controller read-back - the UI's sensitivity control shows\nexactly this value, never an optimistic one.\n\nphase-09d (additive): ``maintenance`` is the live :class:`MaintenanceProgress`\nof an asynchronous job (rail homing that first needs a planned\npre-positioning motion) on this arm, ``None`` when no job exists;\n``maintenance_busy`` stays true for the job's whole life.",
       "properties": {
         "age_s": {
           "anyOf": [
@@ -284,6 +284,18 @@
         "arm_id": {
           "title": "Arm Id",
           "type": "string"
+        },
+        "collision_sensitivity": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Collision Sensitivity"
         },
         "connected": {
           "title": "Connected",
@@ -986,6 +998,14 @@
           "title": "Node Id",
           "type": "string"
         },
+        "policy_arms": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Policy Arms",
+          "type": "array"
+        },
         "policy_attached": {
           "default": false,
           "title": "Policy Attached",
@@ -1235,7 +1255,8 @@
             "clear_errors",
             "apply_backstops",
             "recover",
-            "home_rail"
+            "home_rail",
+            "set_collision_sensitivity"
           ],
           "title": "Op",
           "type": "string"

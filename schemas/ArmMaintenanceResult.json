@@ -1,7 +1,7 @@
 {
   "$defs": {
     "ArmMonitorTelemetry": {
-      "description": "One arm as seen by the read-only state monitor.\n\nEvery field but ``arm_id`` defaults so an arm the monitor never reached\nstill validates. ``q`` is the controller's 7 joint angles in radians,\ncontroller order - an IDENTITY mapping onto the twin's ``<arm>_joint1..7``\n(verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller flange\npose (``tcp_offset`` zero) in the arm base frame, ``[x, y, z]`` m followed\nby ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package).\n``rail_pos_m`` is filled only while the track reports homed (``on_zero ==\n1``) AND enabled - the raw register is meaningless otherwise - whereas\n``rail_raw_mm`` is always reported when the registers are readable.\n``gripper_open_frac`` is 0 closed .. 1 open (``None`` for gripper\n``\"none\"``); ``gripper_raw`` is the SDK reading for diagnosis.\n``error_code``/``warn_code`` are the controller's codes (e.g. 19 = End\nModule Communication Error); ``state`` 4 = stopped / not enabled.\n\nphase-09b read-back (slow poll, additive): ``collision_sensitivity`` /\n``tcp_load_kg`` / ``tcp_load_cog_mm`` are the controller's CURRENT\nsafety parameters; ``backstops_match`` is the runtime's comparison against\nthe arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of\ngravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is\ntrue while a maintenance op executes on this arm.\n\nphase-09d (additive): ``maintenance`` is the live :class:`MaintenanceProgress`\nof an asynchronous job (rail homing that first needs a planned\npre-positioning motion) on this arm, ``None`` when no job exists;\n``maintenance_busy`` stays true for the job's whole life.",
+      "description": "One arm as seen by the read-only state monitor.\n\nEvery field but ``arm_id`` defaults so an arm the monitor never reached\nstill validates. ``q`` is the controller's 7 joint angles in radians,\ncontroller order - an IDENTITY mapping onto the twin's ``<arm>_joint1..7``\n(verified 2026-09-04: no pi offset). ``tcp_pose`` is the controller FLANGE\npose (``tcp_offset`` zero) in the arm base frame, ``[x, y, z]`` m followed\nby ``[roll, pitch, yaw]`` rad (mm/deg converted by the hardware package); the\nRPY is the xArm extrinsic-XYZ convention (``Rz(yaw) . Ry(pitch) . Rx(roll)``).\nThe twin's ``link_tcp`` = flange (+) (Rz(pi), +0.172 m along tool z) on a\ngripper arm - that is ``ArmState.ee_pose``, NOT this field.\n``rail_pos_m`` is filled only while the track reports homed (``on_zero ==\n1``) AND enabled - the raw register is meaningless otherwise - whereas\n``rail_raw_mm`` is always reported when the registers are readable.\n``gripper_open_frac`` is 0 closed .. 1 open (``None`` for gripper\n``\"none\"``); ``gripper_raw`` is the SDK reading for diagnosis.\n``error_code``/``warn_code`` are the controller's codes (e.g. 19 = End\nModule Communication Error); ``state`` 4 = stopped / not enabled.\n\nphase-09b read-back (slow poll, additive): ``collision_sensitivity`` /\n``tcp_load_kg`` / ``tcp_load_cog_mm`` are the controller's CURRENT\nsafety parameters; ``backstops_match`` is the runtime's comparison against\nthe arm's ``ArmConfig`` (sensitivity equal, load within 0.05 kg, centre of\ngravity within 10 mm; ``None`` = not compared) and ``maintenance_busy`` is\ntrue while a maintenance op executes on this arm. Since 2026-09-11 the\nsensitivity term of ``backstops_match`` compares against the level the\noperator last REQUESTED through the ``set_collision_sensitivity``\nmaintenance op when one is set (the runtime remembers it per arm until the\nnext driver connect re-applies the config value), so an intentional\noverride does not read as a mismatch; ``collision_sensitivity`` itself\nstays the raw controller read-back - the UI's sensitivity control shows\nexactly this value, never an optimistic one.\n\nphase-09d (additive): ``maintenance`` is the live :class:`MaintenanceProgress`\nof an asynchronous job (rail homing that first needs a planned\npre-positioning motion) on this arm, ``None`` when no job exists;\n``maintenance_busy`` stays true for the job's whole life.",
       "properties": {
         "age_s": {
           "anyOf": [
@@ -260,7 +260,8 @@
             "clear_errors",
             "apply_backstops",
             "recover",
-            "home_rail"
+            "home_rail",
+            "set_collision_sensitivity"
           ],
           "title": "Op",
           "type": "string"
@@ -494,7 +495,7 @@
       "type": "object"
     }
   },
-  "description": "Outcome of one maintenance op (REST response; 200 whether or not ``ok``).\n\n``sdk_codes`` maps every SDK call the op made to its return code, in call\norder (``{\"clean_error\": 0, \"clean_warn\": 0}``); ``warnings`` lists the\nnon-fatal ``apply_backstops`` codes (e.g. a self-collision tool model the\nfirmware rejected). ``before``/``after`` are ``None`` when the executing\npath had no monitor sample (session path, or the monitor never connected).\n``rail_sweep`` is the twin verdict for ``home_rail`` (dry-run or real;\n``None`` for the other ops) \u2014 a refused sweep is ``ok=False`` with the\nverdict and an empty ``sdk_codes`` (zero writes).\n\nphase-09d (additive): ``status`` says how the op ran \u2014 ``\"done\"`` (the\ndefault; synchronous, 200), ``\"accepted\"`` (an asynchronous ``RailHomingJob``\nstarted because the posture needs a planned pre-positioning motion; 202,\n``job_id`` set, ``ok`` True, ``sdk_codes`` empty so far \u2014 progress rides\n``ArmMonitorTelemetry.maintenance`` and the job's final result, again an\n``ArmMaintenanceResult`` with ``status: done`` and the same ``job_id``,\nreplaces it at ``GET .../maintenance/last``) or ``\"refused\"`` (nothing ran,\n``ok`` False, suggestion in ``detail``).",
+  "description": "Outcome of one maintenance op (REST response; 200 whether or not ``ok``).\n\n``sdk_codes`` maps every SDK call the op made to its return code, in call\norder (``{\"clean_error\": 0, \"clean_warn\": 0}``); ``warnings`` lists the\nnon-fatal ``apply_backstops`` codes (e.g. a self-collision tool model the\nfirmware rejected). ``before``/``after`` are ``None`` when the executing\npath had no monitor sample (session path, or the monitor never connected).\n``rail_sweep`` is the twin verdict for ``home_rail`` (dry-run or real;\n``None`` for the other ops) \u2014 a refused sweep is ``ok=False`` with the\nverdict and an empty ``sdk_codes`` (zero writes).\n\nphase-09d (additive): ``status`` says how the op ran \u2014 ``\"done\"`` (the\ndefault; synchronous, 200), ``\"accepted\"`` (an asynchronous ``RailHomingJob``\nstarted because the posture needs a planned pre-positioning motion; 202,\n``job_id`` set, ``ok`` True, ``sdk_codes`` empty so far \u2014 progress rides\n``ArmMonitorTelemetry.maintenance`` and the job's final result, again an\n``ArmMaintenanceResult`` with ``status: done`` and the same ``job_id``,\nreplaces it at ``GET .../maintenance/last``) or ``\"refused\"`` (nothing ran,\n``ok`` False, suggestion in ``detail``).\n\n2026-09-11 (additive): ``collision_sensitivity`` is the level the\n``set_collision_sensitivity`` op WROTE (1..3; ``None`` for every other op\nand for a refusal) - the session path has no monitor sample to carry the\nread-back, so the UI toasts this value; ``ok`` there means the SDK\naccepted the write, on the monitor path that the rich-frame read-back\nequals it.",
   "properties": {
     "after": {
       "anyOf": [
@@ -522,6 +523,18 @@
       ],
       "default": null
     },
+    "collision_sensitivity": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Collision Sensitivity"
+    },
     "detail": {
       "default": "",
       "title": "Detail",
@@ -548,7 +561,8 @@
         "clear_errors",
         "apply_backstops",
         "recover",
-        "home_rail"
+        "home_rail",
+        "set_collision_sensitivity"
       ],
       "title": "Op",
       "type": "string"

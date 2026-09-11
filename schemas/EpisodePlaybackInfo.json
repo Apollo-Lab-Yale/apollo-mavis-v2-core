@@ -49,6 +49,18 @@
   },
   "description": "``GET /api/datasets/{ns}/{name}/episodes/{id}/playback`` (2026-09-10; operator\nrequest: a **Playback** button on every episode row of the Welcome page's Datasets\npanel, 05-ui \u00a78.1 item 7).\n\nWhat a playback of this episode WOULD do, read from the episode directory only \u2014 no\nsession needed, so the dialog can open and explain itself before anything moves. The\ntwo motion buttons ride ``POST /api/session/playback`` and do need one.\n\n``playable`` false + ``reason`` covers every case the runtime would refuse: no\nsession, a session whose arms or workcell kind do not match the recording, a legacy\ntree, an episode whose parquet is missing or unreadable. The UI shows ``reason``\nverbatim instead of letting the operator meet a 409.",
   "properties": {
+    "action_space": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Action Space"
+    },
     "arms": {
       "items": {
         "$ref": "#/$defs/EpisodePlaybackArm"
@@ -84,6 +96,16 @@
     "repo_id": {
       "title": "Repo Id",
       "type": "string"
+    },
+    "sources": {
+      "default": [
+        "state"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Sources",
+      "type": "array"
     }
   },
   "required": [

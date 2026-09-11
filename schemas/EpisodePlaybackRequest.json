@@ -1,5 +1,5 @@
 {
-  "description": "``POST /api/session/playback`` body (2026-09-10).\n\n``goto_initial`` walks the arms to the episode's first frame and is SYNCHRONOUS,\nlike ``return_home``: the dialog awaits it and only then enables **Playback**, which\nis the operator's rule \u2014 you cannot replay a trajectory from the wrong place.\n``play`` streams the recorded trajectory through the same twin-planned, gated\nexecutor; ``stop`` cancels whatever is in flight.",
+  "description": "``POST /api/session/playback`` body (2026-09-10).\n\n``goto_initial`` walks the arms to the episode's first frame and is SYNCHRONOUS,\nlike ``return_home``: the dialog awaits it and only then enables **Playback**, which\nis the operator's rule \u2014 you cannot replay a trajectory from the wrong place.\n``play`` streams the recorded trajectory through the same twin-planned, gated\nexecutor; ``stop`` cancels whatever is in flight.\n\n``source`` (2026-09-11) picks WHAT is replayed on ``play``: ``state`` (the default) is\nthe joint replay of ``observation.state``; ``delta_ee`` / ``abs_ee`` replay the\nrecorded ``action`` / ``action.abs_ee`` column through the executor path the policy\nuses (``dagger/step.py``) inside the current session's control loop - refused with\n``ok: false`` on hardware sessions until the operator admits it, and when the\ncolumn is absent from the episode.",
   "properties": {
     "action": {
       "enum": [
@@ -18,6 +18,16 @@
     "repo_id": {
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_\\-]*/[A-Za-z0-9][A-Za-z0-9_\\-]*$",
       "title": "Repo Id",
+      "type": "string"
+    },
+    "source": {
+      "default": "state",
+      "enum": [
+        "state",
+        "delta_ee",
+        "abs_ee"
+      ],
+      "title": "Source",
       "type": "string"
     }
   },

@@ -17,7 +17,14 @@ quaternion field name ends in ``_wxyz`` or the metadata says ``quat_order:
 
 Phase-14 (15-online-dagger §6) adds the Online DAgger trainer contract: the generic
 ``trainer_status`` stream, ``PolicySpecAnnounce.capabilities``,
-``SessionAnnounce.online_dagger`` and the ``train_now`` event. History: the v1.0
+``SessionAnnounce.online_dagger`` and the ``train_now`` event. v1.3 (2026-09-11)
+adds the per-arm action streams: ``action_<arm_id>`` / ``policy_action_<arm_id>`` beside
+the whole-cell ``action`` / ``policy_action``, and ``PolicySpecModel.arms`` (the arms a
+policy drives; the others hold) - all additive. v1.3 addendum (2026-09-11, same day): a
+node may announce ``action_space: abs_ee`` (12 / 11 dims per arm = pos3 + rot6d +
+gripper + rail, 10-frames §3.1 / §6); the runtime accepts ``delta_ee | abs_ee`` and sizes
+the per-arm blocks from the announced space - comments only, no spelling changed.
+History: the v1.0
 PRO-DAgger shell superseded 2026-09-08 carried algorithm-specific payloads here;
 none of it shipped and none of it survives — the runtime is algorithm-agnostic.
 """
@@ -153,6 +160,49 @@ POLICY_ACTION_REQUIRED_METADATA: tuple[str, ...] = (
     "policy_version",
 )
 
+# -- per-arm action streams (v1.3, 2026-09-11; 14-dora §5 / §6.1) -------------------------------
+# Beside the whole-cell ``policy/action`` the policy node may publish ONE stream PER ARM,
+# ``action_<arm_id>``, carrying that arm's action block only (``delta_ee`` 8 dims with a
+# rail / 7 without; ``abs_ee`` 12 / 11 = pos3 + rot6d + gripper + rail; 10-frames §6) in
+# the space the node's ``policy_spec`` announces. The runtime declares the matching input
+# ``policy_action_<arm_id>`` for every configured arm (rendered from the workcell like
+# ``cam_<id>``), so a policy trained for the Manipulation Arm alone drives it while the
+# Perception Arm holds still. Same required metadata as ``policy_action``
+# (``action_dim`` = the block size); an optional ``arm_id`` key must agree with the stream.
+# Additive: ``MAVIS_SCHEMA`` stays 1 and ``policy_action`` is not deprecated.
+ARM_ACTION_OUTPUT_PREFIX = "action_"  # policy node output: action_<arm_id>
+IN_POLICY_ARM_ACTION_PREFIX = "policy_action_"  # runtime input: policy_action_<arm_id>
+
+
+def arm_action_output_id(arm_id: str) -> str:
+    """``grip`` -> ``action_grip`` (the policy placeholder's per-arm output)."""
+    return f"{ARM_ACTION_OUTPUT_PREFIX}{arm_id}"
+
+
+def policy_arm_action_input_id(arm_id: str) -> str:
+    """``grip`` -> ``policy_action_grip`` (the runtime's per-arm input)."""
+    return f"{IN_POLICY_ARM_ACTION_PREFIX}{arm_id}"
+
+
+def arm_id_from_policy_arm_action_input(input_id: str) -> str | None:
+    """``policy_action_grip`` -> ``grip``; ``None`` for ``policy_action`` itself or any
+    other id (the whole-cell input is NOT a per-arm one)."""
+    if input_id.startswith(IN_POLICY_ARM_ACTION_PREFIX) and len(input_id) > len(
+        IN_POLICY_ARM_ACTION_PREFIX
+    ):
+        return input_id[len(IN_POLICY_ARM_ACTION_PREFIX) :]
+    return None
+
+
+def arm_id_from_arm_action_output(output_id: str) -> str | None:
+    """``action_grip`` -> ``grip``; ``None`` for ``action`` itself or any other id."""
+    if output_id.startswith(ARM_ACTION_OUTPUT_PREFIX) and len(output_id) > len(
+        ARM_ACTION_OUTPUT_PREFIX
+    ):
+        return output_id[len(ARM_ACTION_OUTPUT_PREFIX) :]
+    return None
+
+
 # -- arm_state block (14-dora §4.2): 32 values per arm, in this order ----------------------------
 ARM_STATE_LAYOUT: tuple[str, ...] = (
     *(f"q{i}" for i in range(1, 8)),
@@ -228,6 +278,15 @@ class PolicySpecModel(BaseModel):
     state_names: list[str]
     camera_keys: list[str] = []
     version: int = 0
+    arms: list[str] = []  # v1.3 (2026-09-11; 14-dora §6.1): the arms this policy DRIVES.
+    #   [] = every session arm (the v1.2 behaviour: ``action_names`` is the whole-cell
+    #   layout). Non-empty = ``action_names`` is the concatenation of exactly these arms'
+    #   blocks (session order) and the node publishes ``action_<arm_id>`` per arm (or the
+    #   whole-cell ``action`` holding just those blocks); every other session arm holds.
+    action_frames: dict[str, str] = {}  # v1.3: per-arm action frame (FrameRef) for policies
+    #   whose arms record in different frames (the cell's datasets use ``arm_base:<arm>``
+    #   per arm); an arm absent here uses ``action_frame``. Checked for DRIVEN arms only.
+    #   Appended last
 
 
 class CameraAnnounce(BaseModel):
@@ -269,7 +328,10 @@ class SessionAnnounce(BaseModel):
     arm_ids: list[str] = []  # WorkcellConfig order (block order everywhere)
     has_rail: dict[str, bool] = {}
     frames: dict[str, FrameRef] = {}  # recording frames actually in force
-    action_space: str | None = None  # "delta_ee" (v1 requirement, 12-dagger §6)
+    action_space: str | None = None  # "delta_ee" = the RECORDED canonical column (12-dagger
+    #   §6). A node may announce ``abs_ee`` in its spec: the runtime accepts delta_ee |
+    #   abs_ee since 2026-09-11 and converts, so an abs_ee spec against a delta_ee session
+    #   is NOT a mismatch
     action_names: list[str] = []
     state_names: list[str] = []
     camera_ids: list[str] = []
@@ -390,6 +452,9 @@ class ExternalStatus(BaseModel):
     trainer_status: TrainerStatusAnnounce | None = None  # phase-14: the newest
     #   policy_trainer_status (session-less; the pre-launch trainer pill), None until one
     #   arrives or after the node detaches. Appended last
+    policy_arms: list[str] = []  # v1.3 (2026-09-11; 14-dora §6.1): the arms the FRESH
+    #   spec drives (``PolicySpecModel.arms``, or every arm its ``action_names`` cover when
+    #   that list is empty); [] when no spec is fresh. Appended last
 
 
 class DoraMachineInfo(BaseModel):
@@ -485,6 +550,12 @@ __all__ = [
     "META_CLIENT",
     "COMMON_OUTPUT_METADATA",
     "POLICY_ACTION_REQUIRED_METADATA",
+    "ARM_ACTION_OUTPUT_PREFIX",
+    "IN_POLICY_ARM_ACTION_PREFIX",
+    "arm_action_output_id",
+    "policy_arm_action_input_id",
+    "arm_id_from_policy_arm_action_input",
+    "arm_id_from_arm_action_output",
     "ARM_STATE_LAYOUT",
     "ARM_STATE_BLOCK",
     "PoseSource",
