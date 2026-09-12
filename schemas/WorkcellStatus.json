@@ -185,6 +185,11 @@
       "default": false,
       "title": "Policies Available",
       "type": "boolean"
+    },
+    "policy_modes": {
+      "default": false,
+      "title": "Policy Modes",
+      "type": "boolean"
     }
   },
   "required": [

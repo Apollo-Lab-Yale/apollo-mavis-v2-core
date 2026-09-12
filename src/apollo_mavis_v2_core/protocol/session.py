@@ -244,6 +244,12 @@ class WorkcellStatus(BaseModel):
     policies_available: bool = False  # enables DAgger/Inference launch (05-ui §8.1)
     hardware_ready: bool = False  # every configured hardware arm reachable == "open"
     #   (gates the Hardware-tab mode launchers; additive, phase-11)
+    policy_modes: bool = False  # hardware: policy-driven sessions (inference / dagger) and
+    #   action-column playback are admitted - the RENDERED config's
+    #   ``hardware_session.policy_modes`` (operator decision 2026-09-12; D7 of
+    #   15-online-dagger before that); always true for sim. The Welcome page's DAgger /
+    #   Inference / Online DAgger cards read it on the Hardware tab (05-ui §8.1); a
+    #   pre-2026-09-12 runtime omits it and the UI keeps refusing. Additive.
 
 
 class SceneInfo(BaseModel):

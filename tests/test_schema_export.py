@@ -391,10 +391,14 @@ def test_workcell_schemas_gain_phase11_fields(tmp_path):
     workcell = json.loads((out / "WorkcellStatus.json").read_text())
     assert set(workcell["properties"]) == {
         "kind", "available_kinds", "arms", "cameras", "policies_available", "hardware_ready",
+        "policy_modes",  # 2026-09-12: hardware_session.policy_modes on the wire
     }
     assert set(workcell["required"]) == {"kind", "available_kinds", "arms", "cameras"}
     assert workcell["properties"]["hardware_ready"] == {
         "type": "boolean", "default": False, "title": "Hardware Ready",
+    }
+    assert workcell["properties"]["policy_modes"] == {
+        "type": "boolean", "default": False, "title": "Policy Modes",
     }
     # The nested arm rows carry the probe field too (same $defs class).
     assert "reachable" in workcell["$defs"]["ArmStatusInfo"]["properties"]

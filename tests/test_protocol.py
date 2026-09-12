@@ -1216,9 +1216,11 @@ def test_workcell_status_phase11_fields_are_additive():
     }
     assert set(WorkcellStatus.model_fields) == {
         "kind", "available_kinds", "arms", "cameras", "policies_available", "hardware_ready",
+        "policy_modes",  # 2026-09-12: hardware_session.policy_modes on the wire
     }
     assert ArmStatusInfo.model_fields["reachable"].default == "unknown"
     assert WorkcellStatus.model_fields["hardware_ready"].default is False
+    assert WorkcellStatus.model_fields["policy_modes"].default is False
     arm = ArmStatusInfo(
         arm_id="grip", ip="192.168.1.185", connected=False, reachable="unreachable",
         has_rail=True, gripper="xarm", gripper_force_capable=True, error_code=0,
@@ -1231,11 +1233,17 @@ def test_workcell_status_phase11_fields_are_additive():
         kind="hardware", available_kinds=["hardware", "sim"], arms=[arm], cameras=[],
     )
     assert status.hardware_ready is False  # default: nothing probed open yet
+    assert status.policy_modes is False  # default: D7 - a pre-2026-09-12 runtime refuses
     legacy = status.model_dump(mode="json")
     legacy.pop("hardware_ready")
+    legacy.pop("policy_modes")
     legacy["arms"][0].pop("reachable")
     parsed = WorkcellStatus.model_validate(legacy)
     assert parsed.hardware_ready is False and parsed.arms[0].reachable == "unknown"
+    assert parsed.policy_modes is False
+    # 2026-09-12: the knob rides the wire as a plain bool; sim producers send true.
+    assert WorkcellStatus.model_validate({**legacy, "policy_modes": True}).policy_modes is True
+    assert json.loads(status.model_dump_json())["policy_modes"] is False
     # ``connected`` keeps its "a session exists" meaning next to the probe result.
     ready = status.model_copy(update={
         "arms": [arm.model_copy(update={"reachable": "open"})], "hardware_ready": True,
